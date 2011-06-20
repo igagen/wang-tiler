@@ -14,11 +14,6 @@ canvas {
   display: none;
 }
 
-#wang-tiles canvas {
-  border-width: 3px;
-  border-type: solid;
-}
-
 .rygb {
   border-top-color: red;
   border-right-color: yellow;
