@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel='stylesheet' href="css/main.css"></link>
+    <script type="text/javascript" src="js/vendor/zepto/zepto.js"></script>
+    <script type="text/javascript" src="js/vendor/zepto/event.js"></script>
+    <script type="text/javascript" src="js/vendor/underscore.js"></script>
+    <script type="text/javascript" src="js/vendor/backbone.js"></script>
+    <script type="text/javascript" src="js/views/wang-view.js"></script>
+  </head>
+  <body>
+    <h2>Wang Tile Generator</h2>
+
+    <form id="image-upload-form">
+      <input type="file" id="image-upload-button" />
+    </form>
+
+    <canvas id="source-canvas"></canvas>
+
+    <div>
+      <canvas id="scratch"></canvas>
+    </div>
+
+    <div id="wang-tiles">
+      <canvas class="rygb"></canvas>
+      <canvas class="gbgb"></canvas>
+      <canvas class="ryry"></canvas>
+      <canvas class="gbry"></canvas>
+      <canvas class="rbgy"></canvas>
+      <canvas class="gygy"></canvas>
+      <canvas class="rbrb"></canvas>
+      <canvas class="gyrb"></canvas>
+    </div>
+
+    <div id="sub-samples">
+      <canvas class="rygb"></canvas>
+      <canvas class="gbgb"></canvas>
+      <canvas class="ryry"></canvas>
+      <canvas class="gbry"></canvas>
+      <canvas class="rbgy"></canvas>
+      <canvas class="gygy"></canvas>
+      <canvas class="rbrb"></canvas>
+      <canvas class="gyrb"></canvas>
+    </div>
+  </body>
+</html>

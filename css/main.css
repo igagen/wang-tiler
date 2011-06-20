@@ -1,0 +1,77 @@
+body {
+  font-family: Arial;
+  padding: 20px;
+  background-color: black;
+  color: white;
+}
+
+canvas {
+  border: 3px solid grey;
+  margin: 10px;
+}
+
+#scratch {
+  display: none;
+}
+
+#wang-tiles canvas {
+  border-width: 3px;
+  border-type: solid;
+}
+
+.rygb {
+  border-top-color: red;
+  border-right-color: yellow;
+  border-bottom-color: green;
+  border-left-color: blue;
+}
+
+.gbgb {
+  border-top-color: green;
+  border-right-color: blue;
+  border-bottom-color: green;
+  border-left-color: blue;
+}
+
+.ryry {
+  border-top-color: red;
+  border-right-color: yellow;
+  border-bottom-color: red;
+  border-left-color: yellow;
+}
+
+.gbry {
+  border-top-color: green;
+  border-right-color: blue;
+  border-bottom-color: red;
+  border-left-color: yellow;
+}
+
+.rbgy {
+  border-top-color: red;
+  border-right-color: blue;
+  border-bottom-color: green;
+  border-left-color: yellow;
+}
+
+.gygy {
+  border-top-color: green;
+  border-right-color: yellow;
+  border-bottom-color: green;
+  border-left-color: yellow;
+}
+
+.rbrb {
+  border-top-color: red;
+  border-right-color: blue;
+  border-bottom-color: red;
+  border-left-color: blue;
+}
+
+.gyrb {
+  border-top-color: green;
+  border-right-color: yellow;
+  border-bottom-color: red;
+  border-left-color: blue;
+}
+
