@@ -2,8 +2,8 @@ var WangView = Backbone.View.extend({
   el: "body",
 
   events: {
-    "change #image-upload-button": "setSourceImage",
-    "load #source-image": "imageLoaded",
+    // "change #image-upload-button": "setSourceImage",
+    // "load #source-image": "imageLoaded",
     "mousedown canvas": "handleMouseDown",
     "mouseup canvas": "handleMouseUp",
     "mousemove canvas": "handleMouseMove"
@@ -24,10 +24,13 @@ var WangView = Backbone.View.extend({
     for (var i = 0; i < this.TILES.length; i++) {
       var tile = this.TILES[i];
       this.tiles[tile] = {};
-      this.tiles[tile].canvas = this[tile + 'DiamondTileCanvas'] = $("#diamond-tiles ." + tile);
-      this.tiles[tile].context = this[tile + 'DiamondTileContext'] = this[tile + 'DiamondTileCanvas'][0].getContext("2d");
-      this.tiles[tile].canvas = this[tile + 'SubSampleCanvas'] = $("#sub-samples ." + tile);
-      this.tiles[tile].context = this[tile + 'SubSampleContext'] = this[tile + 'SubSampleCanvas'][0].getContext("2d");
+
+      this[tile + 'DiamondTileCanvas'] = $("#diamond-tiles ." + tile);
+      this[tile + 'DiamondTileContext'] = this[tile + 'DiamondTileCanvas'][0].getContext("2d");
+      this[tile + 'SubSampleCanvas'] = $("#sub-samples ." + tile);
+      this[tile + 'SubSampleContext'] = this[tile + 'SubSampleCanvas'][0].getContext("2d");
+      this[tile + 'WangTileCanvas'] = $("#wang-tiles ." + tile);
+      this[tile + 'WangTileContext'] = this[tile + 'WangTileCanvas'][0].getContext("2d");
     }
 
     this.sourceContext = this.sourceCanvas[0].getContext("2d");
@@ -42,12 +45,15 @@ var WangView = Backbone.View.extend({
     })
 
     this.sampling = false;
+
+    this.setSourceImage();
   },
 
   setSourceImage: function() {
     this.sourceImage = new Image();
     this.sourceImage.onload = this.imageLoaded;
-    this.sourceImage.src = this.imageUploadButton.val().replace(/C:\\fakepath\\/, 'images/');
+    // this.sourceImage.src = this.imageUploadButton.val().replace(/C:\\fakepath\\/, 'images/');
+    this.sourceImage.src = $("#source-image").attr('src');
   },
 
   imageLoaded: function() {
@@ -93,6 +99,7 @@ var WangView = Backbone.View.extend({
       this.generateDiamonds();
       this.generateDiamondTiles();
       this.generateSubSamples();
+      this.generateWangTiles();
     }
     else {
       this.sourceContext.drawImage(this.sourceImage, 0, 0);
@@ -142,6 +149,18 @@ var WangView = Backbone.View.extend({
       this.subSampleMap[tile] = r;
 
       this.drawSubSampleRect(r.x, r.y, tile);
+    }
+  },
+
+  generateWangTiles: function() {
+    for (var i = 0; i < this.TILES.length; i++) {
+      var tile = this.TILES[i];
+
+      var diamondTileData = this[tile + 'DiamondTileContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+      var subSampleData = this[tile + 'SubSampleContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+      var wangTile = new WangTile(diamondTileData, subSampleData);
+      wangTile.generate();
+      wangTile.draw(this[tile + 'WangTileContext']);
     }
   },
 
@@ -332,61 +351,6 @@ var WangView = Backbone.View.extend({
     context.lineTo(0, this.BLOCK_SIZE);
     context.lineTo(this.BLOCK_SIZE / 2, this.BLOCK_SIZE / 2);
     context.fill();
-  },
-
-  rgbToXyz: function(r, g, b) {
-    r = r / 255;
-    g = g / 255;
-    b = b / 255;
-
-    if (r > 0.04045) r = Math.pow(((r + 0.055) / 1.055), 2.4);
-    else r = r / 12.92;
-    if (g > 0.04045) g = Math.pow(((g + 0.055) / 1.055), 2.4);
-    else g = g / 12.92;
-    if (b > 0.04045) b = Math.pow(((b + 0.055) / 1.055), 2.4);
-    else b = b / 12.92;
-
-    r = r * 100;
-    g = g * 100;
-    b = b * 100;
-
-    return [
-      r * 0.4124 + g * 0.3576 + b * 0.1805,
-      r * 0.2126 + g * 0.7152 + b * 0.0722,
-      r * 0.0193 + g * 0.1192 + b * 0.9505
-    ];
-  },
-
-  xyzToLab: function(x, y, z) {
-    // Constants
-    var v1 = 1 / 3;
-    var v2 = 16 / 116;
-
-    x = x / 95.047;
-    y = y / 100;
-    z = z / 108.883;
-
-    if (x > 0.008856) x = Math.pow(x, v1);
-    else x = (7.787 * x) + v2;
-    if (y > 0.008856) y = Math.pow(y, v1);
-    else y = (7.787 * y) + v2;
-    if (z > 0.008856) z = Math.pow(y, v1);
-    else z = (7.787 * z) + v2;
-
-    return [(116 * y) - 16, 500 * (x - y), 200 * (y - z)];
-  },
-
-  rgbToLab: function(r, g, b) {
-    var xyz = this.rgbToXyz(r, g, b);
-    return xyzToLab(xyz[0], xyz[1], xyz[2]);
-  },
-
-  colorDifference: function(c1, c2) {
-    // e76 algorithm is simply the Euclidean distance between the two colors in the Lab color space
-    var dL = c2[0] - c1[0];
-    var da = c2[1] - c1[1];
-    var db = c2[2] - c1[2];
-    return Math.sqrt(dL * dL + da * da + db * db);
   }
 });
 
