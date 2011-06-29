@@ -12,6 +12,9 @@
     function Node(val, terminal) {
       this.val = val;
       this.terminal = terminal != null ? terminal : false;
+      this.parent = null;
+      this.parentEdge = null;
+      this.tree = null;
       this.edges = [];
     }
     Node.prototype.addEdge = function(node, capacity) {
@@ -47,19 +50,22 @@
   })();
   Graph = (function() {
     function Graph() {
-      this.nodes = [];
-      this.source = this.addNode(new Node("Source", true));
-      this.sink = this.addNode(new Node("Sink", true));
+      this.nodes = {};
+      this.edges = {};
+      this.residualEdges = {};
+      this.numNodes = 0;
+      this.source = this.nodes["source"] = new Node("Source", true);
+      this.sink = this.nodes["sink"] = new Node("Sink", true);
       this.sourceTree = new Tree(this.source);
       this.sinkTree = new Tree(this.sink);
       this.active = [this.source, this.sink];
       this.orphaned = [];
     }
     Graph.prototype.addNode = function(node) {
-      node.parent = null;
-      node.parentEdge = null;
-      node.tree = null;
-      this.nodes.push(node);
+      node.id = this.numNodes++;
+      this.nodes[node.id] = node;
+      this.edges[node.id] = {};
+      this.residualEdges[node.id] = {};
       return node;
     };
     Graph.prototype.setParent = function(node, parent, edge) {
@@ -83,10 +89,32 @@
     Graph.prototype.setMultiSink = function(node) {
       return node.addEdge(this.sink, Infinity);
     };
+    Graph.prototype.validatePath = function(path) {
+      var i, _ref, _results;
+      if (path.length === 0) {
+        return;
+      }
+      if (path[0].src !== this.source) {
+        throw new Error("Path must start at source");
+      }
+      if (path[path.length - 1].dest !== this.sink) {
+        throw new Error("Path must start at sink");
+      }
+      _results = [];
+      for (i = 0, _ref = path.length - 1; 0 <= _ref ? i < _ref : i > _ref; 0 <= _ref ? i++ : i--) {
+        _results.push((function() {
+          if (path[i].dest !== path[i + 1].src) {
+            throw new Error("Interior path edges must match");
+          }
+        })());
+      }
+      return _results;
+    };
     Graph.prototype.computeMaxFlow = function() {
       var edge, path, _i, _len, _ref;
       while (true) {
         path = this.grow();
+        this.validatePath(path);
         if (path.length === 0) {
           break;
         } else {
@@ -104,13 +132,13 @@
       return this.maxFlow;
     };
     Graph.prototype.partition = function() {
-      var node, _i, _len, _ref, _results;
+      var id, node, _ref, _results;
       this.sourceNodes = [];
       this.sinkNodes = [];
       _ref = this.nodes;
       _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        node = _ref[_i];
+      for (id in _ref) {
+        node = _ref[id];
         _results.push(node.tree === this.sourceTree ? this.sourceNodes.push(node) : this.sinkNodes.push(node));
       }
       return _results;
@@ -147,20 +175,19 @@
       var edge, p, q, _i, _len, _ref;
       while (this.active.length) {
         p = this.active[0];
+        q = null;
         _ref = p.edges;
         for (_i = 0, _len = _ref.length; _i < _len; _i++) {
           edge = _ref[_i];
           if (edge.residualCapacity() > 0) {
-            if (p === edge.src) {
-              q = edge.dest;
-            } else {
-              q = edge.src;
-            }
-            if (q.tree === null) {
-              this.setParent(q, p, edge);
-              this.addActive(q);
-            } else if (q.tree !== p.tree) {
-              return this.getPath(p, q);
+            if (p.tree === this.sourceTree && edge.src === p || p.tree === this.sinkTree && edge.dest === p) {
+              q = (edge.src === p ? edge.dest : edge.src);
+              if (q.tree === null) {
+                this.setParent(q, p, edge);
+                this.addActive(q);
+              } else if (q.tree !== p.tree) {
+                return this.getPath(p, q);
+              }
             }
           }
         }
@@ -173,14 +200,14 @@
       minCapacity = Infinity;
       for (_i = 0, _len = path.length; _i < _len; _i++) {
         edge = path[_i];
-        if (edge.capacity < minCapacity) {
-          minCapacity = edge.capacity;
+        if (edge.residualCapacity() < minCapacity) {
+          minCapacity = edge.residualCapacity();
         }
       }
       _results = [];
       for (_j = 0, _len2 = path.length; _j < _len2; _j++) {
         edge = path[_j];
-        edge.flow = minCapacity;
+        edge.flow += minCapacity;
         _results.push(edge.saturated ? edge.src.tree === edge.dest.tree ? edge.src.tree === this.sourceTree ? this.orphan(edge.dest) : edge.src.tree === this.sinkTree ? this.orphan(edge.src) : void 0 : void 0 : void 0);
       }
       return _results;
@@ -196,6 +223,12 @@
     Graph.prototype.attemptParent = function(p, edge) {
       var q;
       q = p === edge.src ? edge.dest : edge.src;
+      if (p.tree === this.sourceTree && edge.dest === p) {
+        return false;
+      }
+      if (p.tree === this.sinkTree && edge.src === p) {
+        return false;
+      }
       if (p.tree === q.tree && edge.residualCapacity() > 0) {
         while (q.parent) {
           if (q.parent === this.source || q.parent === this.sink) {

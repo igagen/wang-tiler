@@ -5,6 +5,9 @@
 
 class Node
   constructor: (@val, @terminal = false) ->
+    @parent = null
+    @parentEdge = null
+    @tree = null
     @edges = []
 
   addEdge: (node, capacity) ->
@@ -24,21 +27,32 @@ class Tree
 
 class Graph
   constructor: ->
-    @nodes = []
-    @source = @addNode(new Node "Source", true)
-    @sink = @addNode(new Node "Sink", true)
+    @nodes = {}
+    @edges = {}
+    @residualEdges = {}
+    @numNodes = 0 # not include source and sink
+    @source = @nodes["source"] = new Node "Source", true
+    @sink = @nodes["sink"] = new Node "Sink", true
     @sourceTree = new Tree @source
     @sinkTree = new Tree @sink
     @active = [@source, @sink]
     @orphaned = []
 
   addNode: (node) ->
-    node.parent = null
-    node.parentEdge = null
-    node.tree = null
-
-    @nodes.push(node)
+    node.id = @numNodes++
+    @nodes[node.id] = node
+    @edges[node.id] = {}
+    @residualEdges[node.id] = {}
     node
+
+  # addEdge: (p, q, capacity) ->
+  #   edge = p.addEdge q, capacity
+  #   edge = new Edge p, q, capacity
+  #   residualEdge = new Edge p, q, capacity
+  #   
+  #   @edges[p][q] = edge
+  #   @residualEdges[p][q] = residualEdge
+  #   edge
 
   setParent: (node, parent, edge) ->
     throw new Error("Can't set parent to a node with no tree") if parent.tree == null
@@ -58,9 +72,25 @@ class Graph
   setMultiSink: (node) ->
     node.addEdge @sink, Infinity
 
+  validatePath: (path) ->
+    return if path.length == 0
+
+    if path[0].src != @source
+      throw new Error("Path must start at source")
+
+    if path[path.length - 1].dest != @sink
+      throw new Error("Path must start at sink")
+
+    for i in [0...path.length - 1]
+      if path[i].dest != path[i + 1].src
+        throw new Error("Interior path edges must match")
+
   computeMaxFlow: ->
     while true
       path = @grow()
+
+      @validatePath path
+
       if path.length == 0 then break else @augment(path)
       @adopt()
 
@@ -75,7 +105,7 @@ class Graph
     @sourceNodes = []
     @sinkNodes = []
 
-    for node in @nodes
+    for id, node of @nodes
       if node.tree == @sourceTree
         @sourceNodes.push(node)
       else
@@ -107,15 +137,16 @@ class Graph
   grow: ->
     while @active.length
       p = @active[0]
+      q = null
 
       for edge in p.edges when edge.residualCapacity() > 0
-        if p == edge.src then q = edge.dest else q = edge.src
-
-        if q.tree == null
-          @setParent q, p, edge
-          @addActive q
-        else if q.tree != p.tree
-          return @getPath p, q
+        if p.tree == @sourceTree && edge.src == p || p.tree == @sinkTree && edge.dest == p
+          q = (if edge.src == p then edge.dest else edge.src)
+          if q.tree == null
+            @setParent q, p, edge
+            @addActive q
+          else if q.tree != p.tree
+            return @getPath p, q
 
       @active.shift()
 
@@ -123,11 +154,11 @@ class Graph
 
   augment: (path) ->
     minCapacity = Infinity
-    for edge in path when edge.capacity < minCapacity
-      minCapacity = edge.capacity
+    for edge in path when edge.residualCapacity() < minCapacity
+      minCapacity = edge.residualCapacity()
 
     for edge in path
-      edge.flow = minCapacity
+      edge.flow += minCapacity
       if edge.saturated
         if edge.src.tree == edge.dest.tree
           if edge.src.tree == @sourceTree
@@ -141,6 +172,10 @@ class Graph
 
   attemptParent: (p, edge) ->
     q = if p == edge.src then edge.dest else edge.src
+    return false if p.tree == @sourceTree && edge.dest == p
+    return false if p.tree == @sinkTree && edge.src == p
+
+    # throw new Error("attemptParent() with invalid edge") if p.tree == null || p.tree == @sourceTree && edge.src != p || p.tree == @sinkTree && edge.dest != p
 
     # Returns true and sets parent if q is a valid parent of p
     # This means q is in the same tree as p, and q is rooted at the source or sink
