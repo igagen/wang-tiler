@@ -6,7 +6,8 @@
     <script type="text/javascript" src="js/vendor/zepto/event.js"></script>
     <script type="text/javascript" src="js/vendor/underscore.js"></script>
     <script type="text/javascript" src="js/vendor/backbone.js"></script>
-    <script type="text/javascript" src="js/models/class.js"></script>
+    <script type="text/javascript" src="js/models/pixel-data.js"></script>
+    <script type="text/javascript" src="js/models/graph.js"></script>
     <script type="text/javascript" src="js/models/wang-tile.js"></script>
     <script type="text/javascript" src="js/views/wang-view.js"></script>
   </head>
@@ -16,6 +17,45 @@
     <form id="image-upload-form">
       <input type="file" id="image-upload-button" />
     </form>
+
+    <canvas id="source-canvas"></canvas>
+
+    <div>
+      <canvas id="scratch"></canvas>
+    </div>
+
+    <div id="diamond-tiles">
+      <canvas class="rygb"></canvas>
+      <canvas class="gbgb"></canvas>
+      <canvas class="ryry"></canvas>
+      <canvas class="gbry"></canvas>
+      <canvas class="rbgy"></canvas>
+      <canvas class="gygy"></canvas>
+      <canvas class="rbrb"></canvas>
+      <canvas class="gyrb"></canvas>
+    </div>
+
+    <div id="sub-samples">
+      <canvas class="rygb"></canvas>
+      <canvas class="gbgb"></canvas>
+      <canvas class="ryry"></canvas>
+      <canvas class="gbry"></canvas>
+      <canvas class="rbgy"></canvas>
+      <canvas class="gygy"></canvas>
+      <canvas class="rbrb"></canvas>
+      <canvas class="gyrb"></canvas>
+    </div>
+
+    <div id="wang-tiles">
+      <canvas class="rygb"></canvas>
+      <canvas class="gbgb"></canvas>
+      <canvas class="ryry"></canvas>
+      <canvas class="gbry"></canvas>
+      <canvas class="rbgy"></canvas>
+      <canvas class="gygy"></canvas>
+      <canvas class="rbrb"></canvas>
+      <canvas class="gyrb"></canvas>
+    </div>
 
     <img id="source-image" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYMAAAHMCAIAAAC4CFP8AAAPVGlDQ1BJQ0MgUHJvZmlsZQAAeAGt
     WHk4lF/fP7MZjGWs2Y0llDVro7Lve/aI7EzGGGMLhShZypYKkWxJKJSQJZUKJRRKKFtZK0qImOce
@@ -4933,44 +4973,5 @@
     EKwwsMLAShKteGCFgRUGvj4GVpLo69NgBcEKAysMrCTRigdWGFhh4OtjYCWJvj4NVhCsMLDCwEoS
     rXhghYEVBr4+BlaS6OvTYAXBCgMrDKwk0YoHVhhYYeDrY2Alib4+DVYQrDCwwsD/AJE+cKTcnrz1
     AAAAAElFTkSuQmCC" />
-
-    <canvas id="source-canvas"></canvas>
-
-    <div>
-      <canvas id="scratch"></canvas>
-    </div>
-
-    <div id="diamond-tiles">
-      <canvas class="rygb"></canvas>
-      <canvas class="gbgb"></canvas>
-      <canvas class="ryry"></canvas>
-      <canvas class="gbry"></canvas>
-      <canvas class="rbgy"></canvas>
-      <canvas class="gygy"></canvas>
-      <canvas class="rbrb"></canvas>
-      <canvas class="gyrb"></canvas>
-    </div>
-
-    <div id="sub-samples">
-      <canvas class="rygb"></canvas>
-      <canvas class="gbgb"></canvas>
-      <canvas class="ryry"></canvas>
-      <canvas class="gbry"></canvas>
-      <canvas class="rbgy"></canvas>
-      <canvas class="gygy"></canvas>
-      <canvas class="rbrb"></canvas>
-      <canvas class="gyrb"></canvas>
-    </div>
-
-    <div id="wang-tiles">
-      <canvas class="rygb"></canvas>
-      <canvas class="gbgb"></canvas>
-      <canvas class="ryry"></canvas>
-      <canvas class="gbry"></canvas>
-      <canvas class="rbgy"></canvas>
-      <canvas class="gygy"></canvas>
-      <canvas class="rbrb"></canvas>
-      <canvas class="gyrb"></canvas>
-    </div>
   </body>
 </html>

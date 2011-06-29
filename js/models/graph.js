@@ -107,7 +107,6 @@
         }
         this.adopt();
       }
-      this.partition();
       this.maxFlow = 0;
       _ref = this.source.edges;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
@@ -260,45 +259,68 @@
   ImageGraph = (function() {
     __extends(ImageGraph, Graph);
     function ImageGraph(imageData1, imageData2) {
-      var node, x, y, _i, _len, _ref, _ref2, _ref3;
-      this.imageData1 = imageData1;
-      this.imageData2 = imageData2;
-      ImageGraph.__super__.constructor.call(this);
-      if (this.imageData1.width !== this.imagedata2.width || this.imageData1.height !== this.imageData2.height) {
+      var leftColorDiff, leftNode, node, topColorDiff, topNode, x, y, _ref, _ref2;
+      if (imageData1.width !== imageData2.width || imageData1.height !== imageData2.height) {
         throw "Image dimensions don't match";
       }
-      this.width = this.rawImageData1.width;
-      this.height = this.rawImageData1.height;
-      this.rawImageData1.toLab();
-      this.rawImageData2.toLab();
+      this.imageData1 = new PixelData(imageData1);
+      this.imageData2 = new PixelData(imageData2);
+      this.width = this.imageData1.width;
+      this.height = this.imageData1.height;
+      this.source = new Node("source");
+      this.sink = new Node("sink");
+      this.source.tree = "source";
+      this.sink.tree = "sink";
+      this.active = [this.source, this.sink];
+      this.orphaned = [];
       this.nodes = new Array(this.imageData1.width);
-      _ref = this.nodes;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        node = _ref[_i];
-        node = new Array(this.imageData1.height);
-      }
-      for (x = 0, _ref2 = this.width; 0 <= _ref2 ? x < _ref2 : x > _ref2; 0 <= _ref2 ? x++ : x--) {
-        for (y = 0, _ref3 = this.height; 0 <= _ref3 ? y < _ref3 : y > _ref3; 0 <= _ref3 ? y++ : y--) {
-          node = this.nodes[x][y] = new FlowNode({
+      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
+        this.nodes[x] = new Array(this.imageData1.height);
+        for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
+          node = this.nodes[x][y] = new Node({
             x: x,
             y: y
           });
           if (x > 0) {
-            this.nodes[x - 1][y].addEdge(node, colorDifference(x - 1, y, x, y));
+            leftNode = this.nodes[x - 1][y];
+            leftColorDiff = this.colorDifference(x, y, x - 1, y);
+            node.addEdge(leftNode, leftColorDiff);
+            leftNode.addEdge(node, leftColorDiff);
           }
           if (y > 0) {
-            this.nodes[x][y - 1].addEdge(node, colorDifference(x, y - 1, x, y));
+            topNode = this.nodes[x][y - 1];
+            topColorDiff = this.colorDifference(x, y, x, y - 1);
+            node.addEdge(topNode, topColorDiff);
+            topNode.addEdge(node, topColorDiff);
           }
         }
       }
     }
+    ImageGraph.prototype.partition = function() {
+      var node, x, y, _ref, _results;
+      this.sourceNodes = [];
+      this.sinkNodes = [];
+      _results = [];
+      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
+        _results.push((function() {
+          var _ref2, _results2;
+          _results2 = [];
+          for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
+            node = this.nodes[x][y];
+            _results2.push(node.tree === "source" ? this.sourceNodes.push(node) : this.sinkNodes.push(node));
+          }
+          return _results2;
+        }).call(this));
+      }
+      return _results;
+    };
     ImageGraph.prototype.colorDifference = function(sx, sy, tx, ty) {
       var s1, s2, t1, t2;
-      s1 = this.imageData1.color(sx, sy);
-      s2 = this.imageData2.color(sx, sy);
-      t1 = this.imageData1.color(tx, ty);
-      t2 = this.imageData2.color(tx, ty);
-      return ImageData.colorDifference(s1, s2) + ImageData.colorDifference(t1, t2);
+      s1 = this.imageData1.labColor(sx, sy);
+      s2 = this.imageData2.labColor(sx, sy);
+      t1 = this.imageData1.labColor(tx, ty);
+      t2 = this.imageData2.labColor(tx, ty);
+      return this.imageData1.colorDifference(s1, s2) + this.imageData1.colorDifference(t1, t2);
     };
     ImageGraph.prototype.getNode = function(x, y) {
       return this.nodes[x][y];
@@ -308,16 +330,17 @@
       if (this.width !== this.height || this.width % 2 !== 0) {
         throw "Wang tiles must be square with even width and height";
       }
-      for (x = 0, _ref = this.width; 0 <= _ref ? x <= _ref : x >= _ref; 0 <= _ref ? x++ : x--) {
+      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
         this.source.addEdge(this.nodes[x][0], Infinity);
         this.source.addEdge(this.nodes[x][this.height - 1], Infinity);
       }
-      for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y <= _ref2 : y >= _ref2; 0 <= _ref2 ? y++ : y--) {
+      for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
         this.source.addEdge(this.nodes[0][y], Infinity);
         this.source.addEdge(this.nodes[this.width - 1][y], Infinity);
       }
       _results = [];
-      for (i = 0, _ref3 = this.width; 0 <= _ref3 ? i <= _ref3 : i >= _ref3; 0 <= _ref3 ? i++ : i--) {
+      for (i = 1, _ref3 = this.width - 1; 1 <= _ref3 ? i < _ref3 : i > _ref3; 1 <= _ref3 ? i++ : i--) {
+        debugger;
         this.nodes[i][i].addEdge(this.sink, Infinity);
         _results.push(this.nodes[i][this.height - 2 - i].addEdge(this.sink, Infinity));
       }
@@ -328,5 +351,5 @@
   window.Node = Node;
   window.Edge = Edge;
   window.Graph = Graph;
-  window.ImageGraph = Graph;
+  window.ImageGraph = ImageGraph;
 }).call(this);

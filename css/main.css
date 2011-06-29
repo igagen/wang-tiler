@@ -5,6 +5,10 @@ body {
   color: white;
 }
 
+#source-image {
+  display: none;
+}
+
 canvas {
   border: 3px solid grey;
   margin: 10px;

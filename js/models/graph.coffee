@@ -31,8 +31,7 @@ class Graph
     @active = [@source, @sink]
     @orphaned = []
 
-  # TODO: Store nodes and edges in an associative array by node id
-  # to remove circular references
+  # TODO: Store nodes and edges in an associative array by node id to remove circular references
   addNode: (node) ->
     @nodes.push(node)
     node
@@ -76,8 +75,6 @@ class Graph
 
       if path.length == 0 then break else @augment(path)
       @adopt()
-
-    @partition()
 
     # Sum the flow going out of the source
     @maxFlow = 0
@@ -196,35 +193,59 @@ class Graph
 # A min-cut of the flow network can be used to graft the two images while
 # minimizing the appearance of seams.
 class ImageGraph extends Graph
-  constructor: (@imageData1, @imageData2) ->
-    super()
-
-    if @imageData1.width != @imagedata2.width || @imageData1.height != @imageData2.height
+  constructor: (imageData1, imageData2) ->
+    if imageData1.width != imageData2.width || imageData1.height != imageData2.height
       throw "Image dimensions don't match"
 
-    @width = @rawImageData1.width
-    @height = @rawImageData1.height
+    @imageData1 = new PixelData imageData1
+    @imageData2 = new PixelData imageData2
 
-    # Convert to lab color
-    @rawImageData1.toLab()
-    @rawImageData2.toLab()
+    @width = @imageData1.width
+    @height = @imageData1.height
+
+    @source = new Node "source"
+    @sink = new Node "sink"
+    @source.tree = "source"
+    @sink.tree = "sink"
+    @active = [@source, @sink]
+    @orphaned = []
 
     # Initialize nodes
     @nodes = new Array @imageData1.width
-    node = new Array @imageData1.height for node in @nodes
+    for x in [0...@width]
+      @nodes[x] = new new Array @imageData1.height
+      for y in [0...@height]
+        node = @nodes[x][y] = new Node { x: x, y: y }
+
+        if x > 0 # Left
+          leftNode = @nodes[x - 1][y]
+          leftColorDiff = @colorDifference x, y, x - 1, y
+          node.addEdge leftNode, leftColorDiff
+          leftNode.addEdge node, leftColorDiff
+
+        if y > 0 # Top
+          topNode = @nodes[x][y - 1]
+          topColorDiff = @colorDifference x, y, x, y - 1
+          node.addEdge topNode, topColorDiff
+          topNode.addEdge node, topColorDiff
+
+  partition: ->
+    @sourceNodes = []
+    @sinkNodes = []
+
     for x in [0...@width]
       for y in [0...@height]
-        node = @nodes[x][y] = new FlowNode { x: x, y: y }
-
-        # Add this node as a neighbor of the node to the left and above
-        @nodes[x - 1][y].addEdge(node, colorDifference(x - 1, y, x, y)) if x > 0
-        @nodes[x][y - 1].addEdge(node, colorDifference(x, y - 1, x, y)) if y > 0
+        node = @nodes[x][y]
+        if node.tree == "source"
+          @sourceNodes.push(node)
+        else
+          @sinkNodes.push(node)
 
   colorDifference: (sx, sy, tx, ty) ->
-    s1 = @imageData1.color(sx, sy); s2 = @imageData2.color(sx, sy)
-    t1 = @imageData1.color(tx, ty); t2 = @imageData2.color(tx, ty)
+    s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
+    t1 = @imageData1.labColor(tx, ty); t2 = @imageData2.labColor(tx, ty)
 
-    ImageData.colorDifference(s1, s2) + ImageData.colorDifference(t1, t2)
+    @imageData1.colorDifference(s1, s2) + @imageData1.colorDifference(t1, t2)
 
   getNode: (x, y) ->
     @nodes[x][y]
@@ -237,16 +258,17 @@ class ImageGraph extends Graph
       throw "Wang tiles must be square with even width and height"
 
     # Add border source nodes
-    for x in [0..@width]
+    for x in [0...@width]
       @source.addEdge @nodes[x][0], Infinity # Top
       @source.addEdge @nodes[x][@height - 1], Infinity # Bottom
 
-    for y in [0..@height]
+    for y in [0...@height]
       @source.addEdge @nodes[0][y], Infinity # Left
       @source.addEdge @nodes[@width - 1][y], Infinity # Right
 
     # Add interior sink nodes (X-shape that divides the image into four triangles, not including 1 pixel border)
-    for i in [0..@width]
+    for i in [1...@width - 1]
+      debugger
       @nodes[i][i].addEdge @sink, Infinity
       @nodes[i][@height - 2 - i].addEdge @sink, Infinity
 
@@ -254,4 +276,4 @@ class ImageGraph extends Graph
 window.Node = Node
 window.Edge = Edge
 window.Graph = Graph
-window.ImageGraph = Graph
+window.ImageGraph = ImageGraph

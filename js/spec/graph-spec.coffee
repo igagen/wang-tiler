@@ -14,10 +14,6 @@ describe "Graph", ->
       @graph.addNode @a
       @graph.addNode @b
 
-      # Add flags for checking state during the algorithm
-      @source.source = true
-      @sink.sink = true
-
       # Add edges
       @sourceToA = @source.addEdge @a, 4
       @sourceToB = @source.addEdge @b, 3
@@ -29,9 +25,10 @@ describe "Graph", ->
       it "should determine the correct max flow", ->
         maxFlow = @graph.computeMaxFlow()
         expect(maxFlow).toBe 7
-    
+
       it "should correctly partition the nodes along the min-cut", ->
         maxFlow = @graph.computeMaxFlow()
+        @graph.partition()
         expect(@graph.sourceNodes).toEqual [@source]
         expect(@graph.sinkNodes).toHaveSameElementsAs [@a, @b, @sink]
 

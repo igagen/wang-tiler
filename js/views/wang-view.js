@@ -9,7 +9,7 @@ var WangView = Backbone.View.extend({
     "mousemove canvas": "handleMouseMove"
   },
 
-  BLOCK_SIZE: 48,
+  BLOCK_SIZE: 8,
   MAX_ITERATIONS: 100,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
@@ -159,7 +159,6 @@ var WangView = Backbone.View.extend({
       var diamondTileData = this[tile + 'DiamondTileContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
       var subSampleData = this[tile + 'SubSampleContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
       var wangTile = new WangTile(diamondTileData, subSampleData);
-      wangTile.generate();
       wangTile.draw(this[tile + 'WangTileContext']);
     }
   },

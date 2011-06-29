@@ -11,8 +11,6 @@
         this.b = new Node("B");
         this.graph.addNode(this.a);
         this.graph.addNode(this.b);
-        this.source.source = true;
-        this.sink.sink = true;
         this.sourceToA = this.source.addEdge(this.a, 4);
         this.sourceToB = this.source.addEdge(this.b, 3);
         this.aToB = this.a.addEdge(this.b, 3);
@@ -28,6 +26,7 @@
         return it("should correctly partition the nodes along the min-cut", function() {
           var maxFlow;
           maxFlow = this.graph.computeMaxFlow();
+          this.graph.partition();
           expect(this.graph.sourceNodes).toEqual([this.source]);
           return expect(this.graph.sinkNodes).toHaveSameElementsAs([this.a, this.b, this.sink]);
         });

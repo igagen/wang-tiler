@@ -1,19 +1,19 @@
-class ImageData
-  constructor: (@rawImageData) ->
-
-  width: -> @rawImageData.width
-  height: -> @rawImageData.height
+class PixelData
+  constructor: (rawImageData) ->
+    @width = rawImageData.width
+    @height = rawImageData.height
+    @rawImageData = rawImageData.data
 
   color: (x, y) ->
-    i = x * width + y
+    i = x * @width + y
     [@rawImageData[i], @rawImageData[i + 1], @rawImageData[i + 2]]
 
   setColor: (x, y, c) ->
-    i = x * width + y
+    i = x * @width + y
     @rawImageData[i] = c[0]; @rawImageData[i + 1] = c[1]; @rawImageData[i + 2] = c[2]
 
   labColor: (x, y) ->
-    xyzToLab(rgbToXyz(color(x, y)))
+    @xyzToLab(@rgbToXyz(@color(x, y)))
 
   rgbToXyz: (rgb) ->
     r = rgb[0] / 255; g = rgb[1] / 255; b = rgb[2] / 255
@@ -30,20 +30,17 @@ class ImageData
 
   xyzToLab: (xyz) ->
     v1 = 1 / 3; v2 = 16 / 116 # Constants
-    x = xyz[0] / 95.047; y = yyz[1] / 100; z = xyz[2] / 108.883
+    x = xyz[0] / 95.047; y = xyz[1] / 100; z = xyz[2] / 108.883
 
     if x > 0.008856 then x = Math.pow x, v1 else x = (7.787 * x) + v2
     if y > 0.008856 then y = Math.pow y, v1 else y = (7.787 * y) + v2
-    if z > 0.008856 then z = Math.pow y, v1 else z = (7.787 * z) + v2
+    if z > 0.008856 then z = Math.pow z, v1 else z = (7.787 * z) + v2
 
     [(116 * y) - 16, 500 * (x - y), 200 * (y - z)]
-
-  toLab: ->
-    for x in [0...@width]
-      for y in [0...@height]
-        setColor(x, y, labColor(x, y))
 
   colorDifference: (c1, c2) ->
     # e76 algorithm is simply the Euclidean distance between the two colors in the Lab color space
     dL = c2[0] - c1[0]; da = c2[1] - c1[1]; db = c2[2] - c1[2]
     Math.sqrt dL * dL + da * da + db * db
+
+window.PixelData = PixelData
