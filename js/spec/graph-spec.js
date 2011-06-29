@@ -13,8 +13,6 @@
         this.graph.addNode(this.b);
         this.source.source = true;
         this.sink.sink = true;
-        this.graph.sourceTree.sourceTree = true;
-        this.graph.sinkTree.sinkTree = true;
         this.sourceToA = this.source.addEdge(this.a, 4);
         this.sourceToB = this.source.addEdge(this.b, 3);
         this.aToB = this.a.addEdge(this.b, 3);
@@ -43,8 +41,8 @@
           expect(path[0].flow).toBe(0);
           expect(path[1].flow).toBe(0);
           this.graph.augment(path);
-          expect(this.a.tree && this.a.tree.sourceTree).toBe(true);
-          expect(this.b.tree && this.b.tree.sourceTree).toBe(true);
+          expect(this.a.tree).toBe("source");
+          expect(this.b.tree).toBe("source");
           expect(this.a.parent === null && this.a.parentEdge === null).toBe(true);
           expect(path[0].flow).toBe(4);
           expect(path[1].flow).toBe(4);
@@ -91,8 +89,6 @@
         this.orphaned = this.graph.orphaned;
         this.source.source = true;
         this.sink.sink = true;
-        this.graph.sourceTree.sourceTree = true;
-        this.graph.sinkTree.sinkTree = true;
         this.a = this.graph.addNode(new Node("A"));
         this.b = this.graph.addNode(new Node("B"));
         this.c = this.graph.addNode(new Node("C"));
@@ -112,9 +108,7 @@
         return it("should determine the correct max flow", function() {
           var maxFlow;
           maxFlow = this.graph.computeMaxFlow();
-          expect(maxFlow).toBe(23);
-          console.debug(this.graph.sourceNodes);
-          return console.debug(this.graph.sinkNodes);
+          return expect(maxFlow).toBe(23);
         });
       });
     });

@@ -1,5 +1,5 @@
 (function() {
-  var Edge, Graph, ImageGraph, Node, Tree;
+  var Edge, Graph, ImageGraph, Node;
   var __hasProp = Object.prototype.hasOwnProperty, __extends = function(child, parent) {
     for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; }
     function ctor() { this.constructor = child; }
@@ -9,9 +9,8 @@
     return child;
   };
   Node = (function() {
-    function Node(val, terminal) {
+    function Node(val) {
       this.val = val;
-      this.terminal = terminal != null ? terminal : false;
       this.parent = null;
       this.parentEdge = null;
       this.tree = null;
@@ -41,31 +40,18 @@
     };
     return Edge;
   })();
-  Tree = (function() {
-    function Tree(root) {
-      this.root = root;
-      this.root.tree = this;
-    }
-    return Tree;
-  })();
   Graph = (function() {
     function Graph() {
-      this.nodes = {};
-      this.edges = {};
-      this.residualEdges = {};
-      this.numNodes = 0;
-      this.source = this.nodes["source"] = new Node("Source", true);
-      this.sink = this.nodes["sink"] = new Node("Sink", true);
-      this.sourceTree = new Tree(this.source);
-      this.sinkTree = new Tree(this.sink);
+      this.nodes = [];
+      this.source = this.addNode(new Node("source"));
+      this.sink = this.addNode(new Node("sink"));
+      this.source.tree = "source";
+      this.sink.tree = "sink";
       this.active = [this.source, this.sink];
       this.orphaned = [];
     }
     Graph.prototype.addNode = function(node) {
-      node.id = this.numNodes++;
-      this.nodes[node.id] = node;
-      this.edges[node.id] = {};
-      this.residualEdges[node.id] = {};
+      this.nodes.push(node);
       return node;
     };
     Graph.prototype.setParent = function(node, parent, edge) {
@@ -114,7 +100,6 @@
       var edge, path, _i, _len, _ref;
       while (true) {
         path = this.grow();
-        this.validatePath(path);
         if (path.length === 0) {
           break;
         } else {
@@ -132,21 +117,21 @@
       return this.maxFlow;
     };
     Graph.prototype.partition = function() {
-      var id, node, _ref, _results;
+      var node, _i, _len, _ref, _results;
       this.sourceNodes = [];
       this.sinkNodes = [];
       _ref = this.nodes;
       _results = [];
-      for (id in _ref) {
-        node = _ref[id];
-        _results.push(node.tree === this.sourceTree ? this.sourceNodes.push(node) : this.sinkNodes.push(node));
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        node = _ref[_i];
+        _results.push(node.tree === "source" ? this.sourceNodes.push(node) : this.sinkNodes.push(node));
       }
       return _results;
     };
     Graph.prototype.getPath = function(p, q) {
       var edge, path, sinkNode, sourceNode, _i, _len, _ref;
       path = [];
-      if (p.tree === this.sourceTree) {
+      if (p.tree === "source") {
         sourceNode = p;
         sinkNode = q;
       } else {
@@ -180,7 +165,7 @@
         for (_i = 0, _len = _ref.length; _i < _len; _i++) {
           edge = _ref[_i];
           if (edge.residualCapacity() > 0) {
-            if (p.tree === this.sourceTree && edge.src === p || p.tree === this.sinkTree && edge.dest === p) {
+            if (p.tree === "source" && edge.src === p || p.tree === "sink" && edge.dest === p) {
               q = (edge.src === p ? edge.dest : edge.src);
               if (q.tree === null) {
                 this.setParent(q, p, edge);
@@ -208,7 +193,7 @@
       for (_j = 0, _len2 = path.length; _j < _len2; _j++) {
         edge = path[_j];
         edge.flow += minCapacity;
-        _results.push(edge.saturated ? edge.src.tree === edge.dest.tree ? edge.src.tree === this.sourceTree ? this.orphan(edge.dest) : edge.src.tree === this.sinkTree ? this.orphan(edge.src) : void 0 : void 0 : void 0);
+        _results.push(edge.saturated ? edge.src.tree === edge.dest.tree ? edge.src.tree === "source" ? this.orphan(edge.dest) : edge.src.tree === "sink" ? this.orphan(edge.src) : void 0 : void 0 : void 0);
       }
       return _results;
     };
@@ -223,10 +208,10 @@
     Graph.prototype.attemptParent = function(p, edge) {
       var q;
       q = p === edge.src ? edge.dest : edge.src;
-      if (p.tree === this.sourceTree && edge.dest === p) {
+      if (p.tree === "source" && edge.dest === p) {
         return false;
       }
-      if (p.tree === this.sinkTree && edge.src === p) {
+      if (p.tree === "sink" && edge.src === p) {
         return false;
       }
       if (p.tree === q.tree && edge.residualCapacity() > 0) {
@@ -278,13 +263,14 @@
       var node, x, y, _i, _len, _ref, _ref2, _ref3;
       this.imageData1 = imageData1;
       this.imageData2 = imageData2;
+      ImageGraph.__super__.constructor.call(this);
       if (this.imageData1.width !== this.imagedata2.width || this.imageData1.height !== this.imageData2.height) {
         throw "Image dimensions don't match";
       }
       this.width = this.rawImageData1.width;
       this.height = this.rawImageData1.height;
-      this.rawImageData1.toLab;
-      this.rawImageData2.toLab;
+      this.rawImageData1.toLab();
+      this.rawImageData2.toLab();
       this.nodes = new Array(this.imageData1.width);
       _ref = this.nodes;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
@@ -305,8 +291,6 @@
           }
         }
       }
-      this.sink = new Node(null, true);
-      this.source = new Node(null, true);
     }
     ImageGraph.prototype.colorDifference = function(sx, sy, tx, ty) {
       var s1, s2, t1, t2;
@@ -343,7 +327,6 @@
   })();
   window.Node = Node;
   window.Edge = Edge;
-  window.Tree = Tree;
   window.Graph = Graph;
   window.ImageGraph = Graph;
 }).call(this);

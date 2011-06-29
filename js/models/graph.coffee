@@ -4,7 +4,7 @@
 # Described here: http://www.csd.uwo.ca/~yuri/Papers/pami04.pdf
 
 class Node
-  constructor: (@val, @terminal = false) ->
+  constructor: (@val) ->
     @parent = null
     @parentEdge = null
     @tree = null
@@ -21,38 +21,21 @@ class Edge
   residualCapacity: -> @capacity - @flow
   saturated: -> @flow == @capacity
 
-class Tree
-  constructor: (@root) ->
-    @root.tree = @
-
 class Graph
   constructor: ->
-    @nodes = {}
-    @edges = {}
-    @residualEdges = {}
-    @numNodes = 0 # not include source and sink
-    @source = @nodes["source"] = new Node "Source", true
-    @sink = @nodes["sink"] = new Node "Sink", true
-    @sourceTree = new Tree @source
-    @sinkTree = new Tree @sink
+    @nodes = []
+    @source = @addNode(new Node("source"))
+    @sink = @addNode(new Node("sink"))
+    @source.tree = "source"
+    @sink.tree = "sink"
     @active = [@source, @sink]
     @orphaned = []
 
+  # TODO: Store nodes and edges in an associative array by node id
+  # to remove circular references
   addNode: (node) ->
-    node.id = @numNodes++
-    @nodes[node.id] = node
-    @edges[node.id] = {}
-    @residualEdges[node.id] = {}
+    @nodes.push(node)
     node
-
-  # addEdge: (p, q, capacity) ->
-  #   edge = p.addEdge q, capacity
-  #   edge = new Edge p, q, capacity
-  #   residualEdge = new Edge p, q, capacity
-  #   
-  #   @edges[p][q] = edge
-  #   @residualEdges[p][q] = residualEdge
-  #   edge
 
   setParent: (node, parent, edge) ->
     throw new Error("Can't set parent to a node with no tree") if parent.tree == null
@@ -89,7 +72,7 @@ class Graph
     while true
       path = @grow()
 
-      @validatePath path
+      # @validatePath path
 
       if path.length == 0 then break else @augment(path)
       @adopt()
@@ -105,15 +88,15 @@ class Graph
     @sourceNodes = []
     @sinkNodes = []
 
-    for id, node of @nodes
-      if node.tree == @sourceTree
+    for node in @nodes
+      if node.tree == "source"
         @sourceNodes.push(node)
       else
         @sinkNodes.push(node)
 
   getPath: (p, q) ->
     path = []
-    if p.tree == @sourceTree
+    if p.tree == "source"
       sourceNode = p; sinkNode = q;
     else
       sourceNode = q; sinkNode = p;
@@ -140,7 +123,7 @@ class Graph
       q = null
 
       for edge in p.edges when edge.residualCapacity() > 0
-        if p.tree == @sourceTree && edge.src == p || p.tree == @sinkTree && edge.dest == p
+        if p.tree == "source" && edge.src == p || p.tree == "sink" && edge.dest == p
           q = (if edge.src == p then edge.dest else edge.src)
           if q.tree == null
             @setParent q, p, edge
@@ -161,9 +144,9 @@ class Graph
       edge.flow += minCapacity
       if edge.saturated
         if edge.src.tree == edge.dest.tree
-          if edge.src.tree == @sourceTree
+          if edge.src.tree == "source"
             @orphan edge.dest
-          else if edge.src.tree == @sinkTree
+          else if edge.src.tree == "sink"
             @orphan edge.src
 
   adopt: ->
@@ -172,10 +155,10 @@ class Graph
 
   attemptParent: (p, edge) ->
     q = if p == edge.src then edge.dest else edge.src
-    return false if p.tree == @sourceTree && edge.dest == p
-    return false if p.tree == @sinkTree && edge.src == p
+    return false if p.tree == "source" && edge.dest == p
+    return false if p.tree == "sink" && edge.src == p
 
-    # throw new Error("attemptParent() with invalid edge") if p.tree == null || p.tree == @sourceTree && edge.src != p || p.tree == @sinkTree && edge.dest != p
+    # throw new Error("attemptParent() with invalid edge") if p.tree == null || p.tree == "source" && edge.src != p || p.tree == "sink" && edge.dest != p
 
     # Returns true and sets parent if q is a valid parent of p
     # This means q is in the same tree as p, and q is rooted at the source or sink
@@ -214,6 +197,8 @@ class Graph
 # minimizing the appearance of seams.
 class ImageGraph extends Graph
   constructor: (@imageData1, @imageData2) ->
+    super()
+
     if @imageData1.width != @imagedata2.width || @imageData1.height != @imageData2.height
       throw "Image dimensions don't match"
 
@@ -221,8 +206,8 @@ class ImageGraph extends Graph
     @height = @rawImageData1.height
 
     # Convert to lab color
-    @rawImageData1.toLab
-    @rawImageData2.toLab
+    @rawImageData1.toLab()
+    @rawImageData2.toLab()
 
     # Initialize nodes
     @nodes = new Array @imageData1.width
@@ -234,9 +219,6 @@ class ImageGraph extends Graph
         # Add this node as a neighbor of the node to the left and above
         @nodes[x - 1][y].addEdge(node, colorDifference(x - 1, y, x, y)) if x > 0
         @nodes[x][y - 1].addEdge(node, colorDifference(x, y - 1, x, y)) if y > 0
-
-    @sink = new Node null, true
-    @source = new Node null, true
 
   colorDifference: (sx, sy, tx, ty) ->
     s1 = @imageData1.color(sx, sy); s2 = @imageData2.color(sx, sy)
@@ -271,6 +253,5 @@ class ImageGraph extends Graph
 # Exports
 window.Node = Node
 window.Edge = Edge
-window.Tree = Tree
 window.Graph = Graph
 window.ImageGraph = Graph

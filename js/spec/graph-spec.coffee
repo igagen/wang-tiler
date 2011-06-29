@@ -17,8 +17,6 @@ describe "Graph", ->
       # Add flags for checking state during the algorithm
       @source.source = true
       @sink.sink = true
-      @graph.sourceTree.sourceTree = true
-      @graph.sinkTree.sinkTree = true
 
       # Add edges
       @sourceToA = @source.addEdge @a, 4
@@ -31,7 +29,7 @@ describe "Graph", ->
       it "should determine the correct max flow", ->
         maxFlow = @graph.computeMaxFlow()
         expect(maxFlow).toBe 7
-
+    
       it "should correctly partition the nodes along the min-cut", ->
         maxFlow = @graph.computeMaxFlow()
         expect(@graph.sourceNodes).toEqual [@source]
@@ -54,8 +52,8 @@ describe "Graph", ->
 
         @graph.augment path
 
-        expect(@a.tree && @a.tree.sourceTree).toBe true
-        expect(@b.tree && @b.tree.sourceTree).toBe true
+        expect(@a.tree).toBe "source"
+        expect(@b.tree).toBe "source"
         expect(@a.parent == null && @a.parentEdge == null).toBe true
         expect(path[0].flow).toBe 4
         expect(path[1].flow).toBe 4
@@ -119,8 +117,6 @@ describe "Graph", ->
       # Add flags for checking state during the algorithm
       @source.source = true
       @sink.sink = true
-      @graph.sourceTree.sourceTree = true
-      @graph.sinkTree.sinkTree = true
 
       # Add nodes
       @a = @graph.addNode(new Node "A")
@@ -144,6 +140,3 @@ describe "Graph", ->
       it "should determine the correct max flow", ->
         maxFlow = @graph.computeMaxFlow()
         expect(maxFlow).toBe 23
-
-        console.debug @graph.sourceNodes
-        console.debug @graph.sinkNodes
