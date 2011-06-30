@@ -2,15 +2,19 @@ class PixelData
   constructor: (rawImageData) ->
     @width = rawImageData.width
     @height = rawImageData.height
-    @rawImageData = rawImageData.data
+    @rawImageData = rawImageData
 
   color: (x, y) ->
-    i = x * @width + y
-    [@rawImageData[i], @rawImageData[i + 1], @rawImageData[i + 2]]
+    i = (y * @width + x) * 4
+    [@rawImageData.data[i], @rawImageData.data[i + 1], @rawImageData.data[i + 2], @rawImageData.data[i + 3]]
 
   setColor: (x, y, c) ->
-    i = x * @width + y
-    @rawImageData[i] = c[0]; @rawImageData[i + 1] = c[1]; @rawImageData[i + 2] = c[2]
+    i = (y * @width + x) * 4
+
+    @rawImageData.data[i] = c[0];
+    @rawImageData.data[i + 1] = c[1];
+    @rawImageData.data[i + 2] = c[2]; 
+    @rawImageData.data[i + 3] = c[3];
 
   labColor: (x, y) ->
     @xyzToLab(@rgbToXyz(@color(x, y)))

@@ -9,8 +9,8 @@ var WangView = Backbone.View.extend({
     "mousemove canvas": "handleMouseMove"
   },
 
-  BLOCK_SIZE: 8,
-  MAX_ITERATIONS: 100,
+  BLOCK_SIZE: 64,
+  MAX_ITERATIONS: 50,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
 
@@ -42,7 +42,9 @@ var WangView = Backbone.View.extend({
     $("#diamond-tiles canvas, #sub-samples canvas, #wang-tiles canvas, #scratch").each(function() {
       $(this).attr('width', blockSize);
       $(this).attr('height', blockSize);
-    })
+    });
+
+    $("#example-canvas").attr('width', 6 * this.BLOCK_SIZE).attr('height', 6 * this.BLOCK_SIZE);
 
     this.sampling = false;
 
@@ -158,8 +160,11 @@ var WangView = Backbone.View.extend({
 
       var diamondTileData = this[tile + 'DiamondTileContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
       var subSampleData = this[tile + 'SubSampleContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
-      var wangTile = new WangTile(diamondTileData, subSampleData);
-      wangTile.draw(this[tile + 'WangTileContext']);
+      var wangTile = new ImageGraph(diamondTileData, subSampleData);
+      wangTile.initWangTile();
+      wangTile.computeGraft();
+      wangTile.drawWangTile(this[tile + 'WangTileContext']);
+      wangTile.drawPath(this[tile + 'SubSampleContext']);
     }
   },
 

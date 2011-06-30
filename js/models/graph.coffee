@@ -38,6 +38,13 @@ class Graph
 
   setParent: (node, parent, edge) ->
     throw new Error("Can't set parent to a node with no tree") if parent.tree == null
+
+    if parent.tree == "source" && (edge.src != parent || edge.dest != node)
+      throw new Error "Invalid edge"
+
+    if parent.tree == "sink" && (edge.dest != parent || edge.src != node)
+      throw new Error "Invalid edge"
+
     node.parent = parent
     node.parentEdge = edge
     node.tree = parent.tree
@@ -47,12 +54,6 @@ class Graph
     node.parentEdge = null
     node.parent = null
     @orphaned.push(node) if @orphaned.indexOf(node) == -1
-
-  setMultiSource: (node) ->
-    @source.addEdge node, Infinity
-
-  setMultiSink: (node) ->
-    node.addEdge @sink, Infinity
 
   validatePath: (path) ->
     return if path.length == 0
@@ -67,19 +68,42 @@ class Graph
       if path[i].dest != path[i + 1].src
         throw new Error("Interior path edges must match")
 
+  printEdge: (edge) ->
+    s = edge.src.val
+    d = edge.dest.val
+    console.debug "#{if s.x != undefined then "(#{s.x}, #{s.y}) - " else "(#{s}) - "} #{if d.x != undefined then "(#{d.x}, #{d.y}): " else "(#{d}): "} #{edge.flow} / #{edge.capacity}"
+
+  printPath: (path) ->
+    console.debug "-------- Path -------"
+    @printEdge(edge) for edge in path
+
+  sourceFlow: ->
+    sourceFlow = 0
+    sourceFlow += edge.flow for edge in @source.edges
+    sourceFlow
+
+  sinkFlow: ->
+    sinkFlow = 0
+    sinkFlow += edge.flow for edge in @source.edges
+    sinkFlow
+
+  validateFlow: ->
+    if @sourceFlow() != @sinkFlow()
+      throw new Error "Source and sink flows don't match"
+
   computeMaxFlow: ->
     while true
       path = @grow()
 
-      # @validatePath path
-
       if path.length == 0 then break else @augment(path)
+
+      # @printPath(path)
+      @validateFlow()
+
       @adopt()
 
-    # Sum the flow going out of the source
-    @maxFlow = 0
-    @maxFlow += edge.flow for edge in @source.edges
-    @maxFlow
+    @validateFlow()
+    @maxFlow = @sourceFlow()
 
   partition: ->
     @sourceNodes = []
@@ -111,6 +135,8 @@ class Graph
     while sinkNode.parent
       path.push sinkNode.parentEdge
       sinkNode = sinkNode.parent
+
+    @validatePath path
 
     path
 
@@ -151,9 +177,9 @@ class Graph
       @process @orphaned.pop()
 
   attemptParent: (p, edge) ->
-    q = if p == edge.src then edge.dest else edge.src
-    return false if p.tree == "source" && edge.dest == p
-    return false if p.tree == "sink" && edge.src == p
+    return false if p.tree == "source" && edge.src == p || p.tree == "sink" && edge.dest == p
+
+    q = (if p == edge.src then edge.dest else edge.src)
 
     # throw new Error("attemptParent() with invalid edge") if p.tree == null || p.tree == "source" && edge.src != p || p.tree == "sink" && edge.dest != p
 
@@ -162,12 +188,13 @@ class Graph
 
     if p.tree == q.tree && edge.residualCapacity() > 0
       # verify that q is rooted at a terminal node, not detached
-      while q.parent
-        if q.parent == @source || q.parent == @sink
+      n = q
+      while n.parent
+        if n.parent == @source || n.parent == @sink
           @setParent p, q, edge # Valid parent found, set it and return true
           return true
 
-        q = q.parent
+        n = n.parent
 
     false
 
@@ -176,7 +203,9 @@ class Graph
 
   process: (p) ->
     for edge in p.edges
-      return if @attemptParent p, edge # Return if we found a valid parent
+      if p.tree == "source" && edge.dest == p || p.tree == "sink" && edge.src == p
+        
+        return if @attemptParent p, edge # Return if we found a valid parent
 
     for edge in p.edges
       q = if p == edge.src then edge.dest else edge.src
@@ -219,13 +248,13 @@ class ImageGraph extends Graph
 
         if x > 0 # Left
           leftNode = @nodes[x - 1][y]
-          leftColorDiff = @colorDifference x, y, x - 1, y
+          leftColorDiff = @colorDifference x - 1, y, x, y
           node.addEdge leftNode, leftColorDiff
           leftNode.addEdge node, leftColorDiff
 
         if y > 0 # Top
           topNode = @nodes[x][y - 1]
-          topColorDiff = @colorDifference x, y, x, y - 1
+          topColorDiff = @colorDifference x, y - 1, x, y
           node.addEdge topNode, topColorDiff
           topNode.addEdge node, topColorDiff
 
@@ -238,8 +267,12 @@ class ImageGraph extends Graph
         node = @nodes[x][y]
         if node.tree == "source"
           @sourceNodes.push(node)
-        else
+        else if node.tree == "sink"
           @sinkNodes.push(node)
+        else
+          @sourceNodes.push(node)
+          # console.debug "ERROR: (" + x + ", " + y + ") not in source or sink"
+          # throw new Error "All nodes should be in the source or sink"
 
   colorDifference: (sx, sy, tx, ty) ->
     s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
@@ -268,9 +301,57 @@ class ImageGraph extends Graph
 
     # Add interior sink nodes (X-shape that divides the image into four triangles, not including 1 pixel border)
     for i in [1...@width - 1]
-      debugger
       @nodes[i][i].addEdge @sink, Infinity
-      @nodes[i][@height - 2 - i].addEdge @sink, Infinity
+      @nodes[i][@height - 1 - i].addEdge @sink, Infinity
+
+  computeGraft: ->
+    @computeMaxFlow()
+    @partition()
+
+  drawPath: (context) ->
+    rawImageData = context.createImageData @width, @height
+    imageData = new PixelData rawImageData
+
+    for node in @sourceNodes
+      x = node.val.x
+      y = node.val.y
+      imageData.setColor x, y, [0, 0, 0, 255]
+
+    for node in @sinkNodes
+      x = node.val.x
+      y = node.val.y
+      imageData.setColor(x, y, @imageData2.color(x, y))
+
+    context.putImageData rawImageData, 0, 0
+
+  drawWangTile: (context) ->
+    rawImageData = context.createImageData @width, @height
+    imageData = new PixelData rawImageData
+
+    for node in @sourceNodes
+      x = node.val.x
+      y = node.val.y
+      imageData.setColor(x, y, @imageData1.color(x, y))
+
+    for node in @sinkNodes
+      x = node.val.x
+      y = node.val.y
+      imageData.setColor(x, y, @imageData2.color(x, y))
+
+    context.putImageData imageData.rawImageData, 0, 0
+
+  printWangTile: ->
+    console.debug "---------- SOURCE ----------"
+    for node in @sourceNodes
+      x = node.val.x
+      y = node.val.y
+      console.debug "(#{x},#{y})"
+
+    console.debug "---------- SINK ----------"
+    for node in @sinkNodes
+      x = node.val.x
+      y = node.val.y
+      console.debug "(#{x},#{y})"
 
 # Exports
 window.Node = Node

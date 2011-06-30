@@ -4,19 +4,20 @@
     function PixelData(rawImageData) {
       this.width = rawImageData.width;
       this.height = rawImageData.height;
-      this.rawImageData = rawImageData.data;
+      this.rawImageData = rawImageData;
     }
     PixelData.prototype.color = function(x, y) {
       var i;
-      i = x * this.width + y;
-      return [this.rawImageData[i], this.rawImageData[i + 1], this.rawImageData[i + 2]];
+      i = (y * this.width + x) * 4;
+      return [this.rawImageData.data[i], this.rawImageData.data[i + 1], this.rawImageData.data[i + 2], this.rawImageData.data[i + 3]];
     };
     PixelData.prototype.setColor = function(x, y, c) {
       var i;
-      i = x * this.width + y;
-      this.rawImageData[i] = c[0];
-      this.rawImageData[i + 1] = c[1];
-      return this.rawImageData[i + 2] = c[2];
+      i = (y * this.width + x) * 4;
+      this.rawImageData.data[i] = c[0];
+      this.rawImageData.data[i + 1] = c[1];
+      this.rawImageData.data[i + 2] = c[2];
+      return this.rawImageData.data[i + 3] = c[3];
     };
     PixelData.prototype.labColor = function(x, y) {
       return this.xyzToLab(this.rgbToXyz(this.color(x, y)));

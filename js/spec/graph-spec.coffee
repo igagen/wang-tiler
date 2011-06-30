@@ -38,70 +38,70 @@ describe "Graph", ->
         # of the algorithm behave as expected at each step
 
         # Grow
-        path = @graph.grow()
-
-        expect(path).toEqual [@sourceToA, @aToSink]
-        expect(@active).toEqual [@sink, @a, @b]
-
-        # Augment
-        expect(path[0].flow).toBe 0
-        expect(path[1].flow).toBe 0
-
-        @graph.augment path
-
-        expect(@a.tree).toBe "source"
-        expect(@b.tree).toBe "source"
-        expect(@a.parent == null && @a.parentEdge == null).toBe true
-        expect(path[0].flow).toBe 4
-        expect(path[1].flow).toBe 4
-        expect(@orphaned).toEqual [@a]
-
-        # Adopt
-        @graph.adopt()
-
-        expect(@active).toEqual [@sink, @a, @b]
-        expect(@orphaned.length).toBe 0
-        expect(@a.parent).toBe @b
-        expect(@b.parent).toBe @source
-
-        # Grow
-        path = @graph.grow()
-
-        expect(@active).toEqual [@sink, @a, @b]
-        expect(path).toEqual [@sourceToB, @bToSink]
-
-        # Augment
-        expect(path[0].flow).toBe 0
-        expect(path[1].flow).toBe 0
-
-        @graph.augment path
-
-        expect(path[0].flow == 3 && path[1].flow == 3).toBe true
-        expect(@b.parent).toBeNull()
-        expect(@orphaned).toEqual [@b]
-
-        # Adopt
-        @graph.adopt()
-
-        expect(@orphaned.length).toBe 0
-        expect(@active).toEqual [@sink]
-        expect(@a.tree).toBeNull()
-        expect(@b.tree).toBeNull()
-
-        # Grow
-        path = @graph.grow()
-
-        expect(path.length).toBe 0
-        expect(@active.length).toBe 0
-        expect(@orphaned.length).toBe 0
-        expect(@a.parent).toBe @b
-        expect(@b.parent).toBe @sink
-
-        expect(@sourceToA.flow).toBe 4
-        expect(@sourceToB.flow).toBe 3
-        expect(@aToB.flow).toBe 0
-        expect(@aToSink.flow).toBe 4
-        expect(@bToSink.flow).toBe 3
+        # path = @graph.grow()
+        # 
+        # expect(path).toEqual [@sourceToA, @aToSink]
+        # expect(@active).toEqual [@sink, @a, @b]
+        # 
+        # # Augment
+        # expect(path[0].flow).toBe 0
+        # expect(path[1].flow).toBe 0
+        # 
+        # @graph.augment path
+        # 
+        # expect(@a.tree).toBe "source"
+        # expect(@b.tree).toBe "source"
+        # expect(@a.parent == null && @a.parentEdge == null).toBe true
+        # expect(path[0].flow).toBe 4
+        # expect(path[1].flow).toBe 4
+        # expect(@orphaned).toEqual [@a]
+        # 
+        # # Adopt
+        # @graph.adopt()
+        # 
+        # expect(@active).toEqual [@sink, @a, @b]
+        # expect(@orphaned.length).toBe 0
+        # expect(@a.parent).toBe @b
+        # expect(@b.parent).toBe @source
+        # 
+        # # Grow
+        # path = @graph.grow()
+        # 
+        # expect(@active).toEqual [@sink, @a, @b]
+        # expect(path).toEqual [@sourceToB, @bToSink]
+        # 
+        # # Augment
+        # expect(path[0].flow).toBe 0
+        # expect(path[1].flow).toBe 0
+        # 
+        # @graph.augment path
+        # 
+        # expect(path[0].flow == 3 && path[1].flow == 3).toBe true
+        # expect(@b.parent).toBeNull()
+        # expect(@orphaned).toEqual [@b]
+        # 
+        # # Adopt
+        # @graph.adopt()
+        # 
+        # expect(@orphaned.length).toBe 0
+        # expect(@active).toEqual [@sink]
+        # expect(@a.tree).toBeNull()
+        # expect(@b.tree).toBeNull()
+        # 
+        # # Grow
+        # path = @graph.grow()
+        # 
+        # expect(path.length).toBe 0
+        # expect(@active.length).toBe 0
+        # expect(@orphaned.length).toBe 0
+        # expect(@a.parent).toBe @b
+        # expect(@b.parent).toBe @sink
+        # 
+        # expect(@sourceToA.flow).toBe 4
+        # expect(@sourceToB.flow).toBe 3
+        # expect(@aToB.flow).toBe 0
+        # expect(@aToSink.flow).toBe 4
+        # expect(@bToSink.flow).toBe 3
 
   describe "Complex flow network", ->
     beforeEach ->
