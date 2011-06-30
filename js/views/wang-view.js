@@ -9,10 +9,21 @@ var WangView = Backbone.View.extend({
     "mousemove canvas": "handleMouseMove"
   },
 
-  BLOCK_SIZE: 64,
-  MAX_ITERATIONS: 50,
+  BLOCK_SIZE: 80,
+  MAX_ITERATIONS: 25,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
+
+  matchTile: function(colors) {
+    var matches = [];
+    for (var i = 0; i < TILES.length; i++) {
+      var tile = TILES[i];
+      if (tile.matches(colors)) matches.push(tile);
+    }
+
+    var i = Math.floor(matches.length * Math.random());
+    return matches[i];
+  },
 
   initialize: function() {
     _.bindAll(this, "setSourceImage", "imageLoaded", "handleMouseDown", "handleMouseUp", "handleMouseMove");

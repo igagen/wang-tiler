@@ -292,15 +292,27 @@ class ImageGraph extends Graph
 
     # Add border source nodes
     for x in [0...@width]
+      # Increase of source nodes to discourage cutting paths that touch the seams
+      edge.capacity = Infinity for edge in @nodes[x][0].edges
+      edge.capacity = Infinity for edge in @nodes[x][@height - 1].edges
+
       @source.addEdge @nodes[x][0], Infinity # Top
       @source.addEdge @nodes[x][@height - 1], Infinity # Bottom
 
     for y in [0...@height]
+      # Increase weights of source nodes to discourage cutting paths that touch the seams
+      edge.capacity = Infinity for edge in @nodes[0][y].edges
+      edge.capacity = Infinity for edge in @nodes[@width - 1][y].edges
+
       @source.addEdge @nodes[0][y], Infinity # Left
       @source.addEdge @nodes[@width - 1][y], Infinity # Right
 
     # Add interior sink nodes (X-shape that divides the image into four triangles, not including 1 pixel border)
     for i in [1...@width - 1]
+      # Double weights of sink nodes to discourage cutting paths that touch the seams
+      edge.capacity *= 2 for edge in @nodes[i][i].edges
+      edge.capacity *= 2 for edge in @nodes[i][@height - 1 - i].edges
+
       @nodes[i][i].addEdge @sink, Infinity
       @nodes[i][@height - 1 - i].addEdge @sink, Infinity
 
@@ -315,7 +327,7 @@ class ImageGraph extends Graph
     for node in @sourceNodes
       x = node.val.x
       y = node.val.y
-      imageData.setColor x, y, [0, 0, 0, 255]
+      imageData.setColor x, y, [255, 0, 255, 255]
 
     for node in @sinkNodes
       x = node.val.x
