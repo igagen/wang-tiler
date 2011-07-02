@@ -10,26 +10,16 @@ var WangView = Backbone.View.extend({
   },
 
   BLOCK_SIZE: 80,
-  MAX_ITERATIONS: 25,
+  MAX_ITERATIONS: 100,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
-
-  matchTile: function(colors) {
-    var matches = [];
-    for (var i = 0; i < TILES.length; i++) {
-      var tile = TILES[i];
-      if (tile.matches(colors)) matches.push(tile);
-    }
-
-    var i = Math.floor(matches.length * Math.random());
-    return matches[i];
-  },
 
   initialize: function() {
     _.bindAll(this, "setSourceImage", "imageLoaded", "handleMouseDown", "handleMouseUp", "handleMouseMove");
 
     this.sourceCanvas = $("#source-canvas");
-    this.scratchCanvas = $("#scratch");
+    this.targetCanvas = $("#target-canvas");
+    this.scratchCanvas = $("#scratch-canvas");
     this.tiles = {};
 
     for (var i = 0; i < this.TILES.length; i++) {
@@ -46,16 +36,17 @@ var WangView = Backbone.View.extend({
 
     this.sourceContext = this.sourceCanvas[0].getContext("2d");
     this.scratchContext = this.scratchCanvas[0].getContext("2d");
+    this.targetContext = this.targetCanvas[0].getContext("2d");
 
     this.imageUploadButton = $("#image-upload-button");
 
     var blockSize = this.BLOCK_SIZE;
-    $("#diamond-tiles canvas, #sub-samples canvas, #wang-tiles canvas, #scratch").each(function() {
+    $("#diamond-tiles canvas, #sub-samples canvas, #wang-tiles canvas, #scratch-canvas").each(function() {
       $(this).attr('width', blockSize);
       $(this).attr('height', blockSize);
     });
 
-    $("#example-canvas").attr('width', 6 * this.BLOCK_SIZE).attr('height', 6 * this.BLOCK_SIZE);
+    $("#target-canvas").attr('width', 6 * this.BLOCK_SIZE).attr('height', 6 * this.BLOCK_SIZE);
 
     this.sampling = false;
 
@@ -153,12 +144,43 @@ var WangView = Backbone.View.extend({
     this.drawDiamond(this.sampleRect.x + this.yellowDiamond.x, this.sampleRect.y + this.yellowDiamond.y, 'rgba(255,255,0,0.4)');
   },
 
+  getSubSampleDiff: function(tile, rect) {
+    this.scratchContext.drawImage(this.sourceImage, rect.x, rect.y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+    var subSampleData = new PixelData(this.scratchContext.getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE));
+    var diamondTileData = new PixelData(this[tile + 'DiamondTileContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE));
+    
+    return subSampleData.imageDiff(diamondTileData);
+  },
+
+  addBestRect: function(tile) {
+    var maxIterations = 50;
+    var minDiff = Infinity;
+    var bestRect;
+    for (var i = 0; i < maxIterations; i++) {
+      var r = this.getRandomRectWithoutDupCheck();
+      
+      var diff = this.getSubSampleDiff(tile, r);
+      if (diff < minDiff) {
+        minDiff = diff;
+        console.debug(minDiff);
+        bestRect = r;
+      }
+    }
+
+    console.debug("Image diff: " + minDiff);
+
+    this.subSamples.push(bestRect);
+    return bestRect;
+  },
+
   generateSubSamples: function() {
     this.subSamples = [];
     this.subSampleMap = {};
     for (var i = 0; i < this.TILES.length; i++) {
       var tile = this.TILES[i];
       var r = this.addRandomRect(this.subSamples);
+      // var r = this.addBestRect(tile);
+
       this.subSampleMap[tile] = r;
 
       this.drawSubSampleRect(r.x, r.y, tile);
@@ -174,9 +196,12 @@ var WangView = Backbone.View.extend({
       var wangTile = new ImageGraph(diamondTileData, subSampleData);
       wangTile.initWangTile();
       wangTile.computeGraft();
+      // console.debug(wangTile.maxFlow);
       wangTile.drawWangTile(this[tile + 'WangTileContext']);
       wangTile.drawPath(this[tile + 'SubSampleContext']);
     }
+
+    this.drawTiles(this.targetContext, this.targetCanvas.attr('width'), this.targetCanvas.attr('height'));
   },
 
   drawDiamond: function(x, y, color) {
@@ -366,6 +391,61 @@ var WangView = Backbone.View.extend({
     context.lineTo(0, this.BLOCK_SIZE);
     context.lineTo(this.BLOCK_SIZE / 2, this.BLOCK_SIZE / 2);
     context.fill();
+  },
+
+  random: function(max) {
+    // Returns a random integer from 0 to max - 1
+    return Math.floor(max * Math.random());
+  },
+
+  matchTile: function(colors) {
+    var matches = [];
+    for (var i = 0; i < this.TILES.length; i++) {
+      var tile = this.TILES[i];
+      if (tile.match(colors)) matches.push(tile);
+    }
+
+    var i = this.random(matches.length);
+    return matches[i];
+  },
+
+  drawTiles: function(context, width, height) {
+    // var tileContext = this["ryryWangTileContext"];
+    // var imageData = tileContext.getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+    // this.targetContext.putImageData(imageData, 0, 0);
+    
+    var x, y, tile;
+    var xTiles = width / this.BLOCK_SIZE;
+    var yTiles = height / this.BLOCK_SIZE;
+    var tiles = new Array(xTiles);
+    for (x = 0; x < xTiles; x++) tiles[x] = new Array(yTiles);
+
+    for (x = 0; x < xTiles; x++) {
+      for (y = 0; y < yTiles; y++) {
+        if (x == 0 && y == 0) {
+          // Pick random tile for the first one
+          tiles[x][y] = this.TILES[this.random(this.TILES.length)];
+        }
+        else if (x == 0) {
+          // Left column, match top of this tile to bottom of above tile
+          tiles[x][y] = this.matchTile(new RegExp(tiles[x][y - 1][2] + "..."));
+        }
+        else if (y == 0) {
+          // Top row, match left
+          tiles[x][y] = this.matchTile(new RegExp("..." + tiles[x - 1][y][1]));
+        }
+        else {
+          // Interior tile, match top and left
+          tiles[x][y] = this.matchTile(new RegExp(tiles[x][y - 1][2] + ".." + tiles[x - 1][y][1]));
+        }
+        
+        // console.debug("(" + x + ", " + y + "): " + tiles[x][y]);
+
+        var tileContext = this[tiles[x][y] + "WangTileContext"];
+        var imageData = tileContext.getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+        context.putImageData(imageData, x * this.BLOCK_SIZE, y * this.BLOCK_SIZE);
+      }
+    }
   }
 });
 

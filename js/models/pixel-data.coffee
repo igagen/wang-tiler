@@ -42,6 +42,16 @@ class PixelData
 
     [(116 * y) - 16, 500 * (x - y), 200 * (y - z)]
 
+  imageDiff: (imageData) ->
+    return Infinity if @width != imageData.width || @height != imageData.height
+
+    diff = 0
+    for x in [0...@width]
+      for y in [0...@height]
+        diff += @colorDifference(@labColor(x, y), imageData.labColor(x, y))
+
+    diff / (@width * @height)
+
   colorDifference: (c1, c2) ->
     # e76 algorithm is simply the Euclidean distance between the two colors in the Lab color space
     dL = c2[0] - c1[0]; da = c2[1] - c1[1]; db = c2[2] - c1[2]

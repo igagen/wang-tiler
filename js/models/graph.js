@@ -76,7 +76,7 @@
       }
     };
     Graph.prototype.validatePath = function(path) {
-      var i, _ref, _results;
+      var edge, i, _i, _len, _ref, _results;
       if (path.length === 0) {
         return;
       }
@@ -86,11 +86,17 @@
       if (path[path.length - 1].dest !== this.sink) {
         throw new Error("Path must start at sink");
       }
-      _results = [];
       for (i = 0, _ref = path.length - 1; 0 <= _ref ? i < _ref : i > _ref; 0 <= _ref ? i++ : i--) {
+        if (path[i].dest !== path[i + 1].src) {
+          throw new Error("Interior path edges must match");
+        }
+      }
+      _results = [];
+      for (_i = 0, _len = path.length; _i < _len; _i++) {
+        edge = path[_i];
         _results.push((function() {
-          if (path[i].dest !== path[i + 1].src) {
-            throw new Error("Interior path edges must match");
+          if (edge.flow === Infinity) {
+            throw new Error("Infinite flow");
           }
         })());
       }
@@ -160,7 +166,7 @@
       _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         node = _ref[_i];
-        _results.push(node.tree === "source" ? this.sourceNodes.push(node) : this.sinkNodes.push(node));
+        _results.push(node.tree === "sink" ? this.sourceNodes.push(node) : node.tree === "sink" ? this.sinkNodes.push(node) : this.sourceNodes.push(node));
       }
       return _results;
     };
@@ -311,6 +317,7 @@
       this.sink.tree = "sink";
       this.active = [this.source, this.sink];
       this.orphaned = [];
+      this.fullGraph = false;
       this.nodes = new Array(this.imageData1.width);
       for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
         this.nodes[x] = new Array(this.imageData1.height);
@@ -319,17 +326,19 @@
             x: x,
             y: y
           });
-          if (x > 0) {
-            leftNode = this.nodes[x - 1][y];
-            leftColorDiff = this.colorDifference(x - 1, y, x, y);
-            node.addEdge(leftNode, leftColorDiff);
-            leftNode.addEdge(node, leftColorDiff);
-          }
-          if (y > 0) {
-            topNode = this.nodes[x][y - 1];
-            topColorDiff = this.colorDifference(x, y - 1, x, y);
-            node.addEdge(topNode, topColorDiff);
-            topNode.addEdge(node, topColorDiff);
+          if (this.fullGraph) {
+            if (x > 0) {
+              leftNode = this.nodes[x - 1][y];
+              leftColorDiff = this.colorDifference(x - 1, y, x, y);
+              node.addEdge(leftNode, leftColorDiff);
+              leftNode.addEdge(node, leftColorDiff);
+            }
+            if (y > 0) {
+              topNode = this.nodes[x][y - 1];
+              topColorDiff = this.colorDifference(x, y - 1, x, y);
+              node.addEdge(topNode, topColorDiff);
+              topNode.addEdge(node, topColorDiff);
+            }
           }
         }
       }
@@ -345,7 +354,7 @@
           _results2 = [];
           for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
             node = this.nodes[x][y];
-            _results2.push(node.tree === "source" ? this.sourceNodes.push(node) : node.tree === "sink" ? this.sinkNodes.push(node) : this.sourceNodes.push(node));
+            _results2.push(node.tree === "source" ? this.sourceNodes.push(node) : node.tree === "sink" ? this.sinkNodes.push(node) : this.sinkNodes.push(node));
           }
           return _results2;
         }).call(this));
@@ -364,54 +373,141 @@
       return this.nodes[x][y];
     };
     ImageGraph.prototype.initWangTile = function() {
-      var edge, i, x, y, _i, _j, _k, _l, _len, _len2, _len3, _len4, _len5, _len6, _m, _n, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9, _results;
+      var edge, edgeMult, i, src, x, y, _i, _j, _k, _l, _len, _len2, _len3, _len4, _len5, _len6, _m, _n, _ref, _ref10, _ref11, _ref12, _ref13, _ref14, _ref15, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9, _results;
       if (this.width !== this.height || this.width % 2 !== 0) {
         throw "Wang tiles must be square with even width and height";
       }
+      this.edgeMult = 4;
+      this.edgeMultDecay = 0.6;
       for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
-        _ref2 = this.nodes[x][0].edges;
+        _ref2 = this.nodes[x][0];
         for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
           edge = _ref2[_i];
-          edge.capacity = Infinity;
+          edge.capacity *= this.edgeMult;
         }
-        _ref3 = this.nodes[x][this.height - 1].edges;
+        _ref3 = this.nodes[x][this.height - 1];
         for (_j = 0, _len2 = _ref3.length; _j < _len2; _j++) {
           edge = _ref3[_j];
-          edge.capacity = Infinity;
+          edge.capacity *= this.edgeMult;
         }
+        this.nodes[x][0].multiSource = true;
+        this.nodes[x][this.height - 1].multiSource = true;
         this.source.addEdge(this.nodes[x][0], Infinity);
         this.source.addEdge(this.nodes[x][this.height - 1], Infinity);
       }
       for (y = 0, _ref4 = this.height; 0 <= _ref4 ? y < _ref4 : y > _ref4; 0 <= _ref4 ? y++ : y--) {
-        _ref5 = this.nodes[0][y].edges;
+        _ref5 = this.nodes[0][y];
         for (_k = 0, _len3 = _ref5.length; _k < _len3; _k++) {
           edge = _ref5[_k];
-          edge.capacity = Infinity;
+          edge.capacity *= this.edgeMult;
         }
-        _ref6 = this.nodes[this.width - 1][y].edges;
+        _ref6 = this.nodes[this.width - 1][y];
         for (_l = 0, _len4 = _ref6.length; _l < _len4; _l++) {
           edge = _ref6[_l];
-          edge.capacity = Infinity;
+          edge.capacity *= this.edgeMult;
         }
+        this.nodes[0][y].multiSource = true;
+        this.nodes[this.width - 1][y].multiSource = true;
         this.source.addEdge(this.nodes[0][y], Infinity);
         this.source.addEdge(this.nodes[this.width - 1][y], Infinity);
       }
-      _results = [];
       for (i = 1, _ref7 = this.width - 1; 1 <= _ref7 ? i < _ref7 : i > _ref7; 1 <= _ref7 ? i++ : i--) {
-        _ref8 = this.nodes[i][i].edges;
+        _ref8 = this.nodes[i][i];
         for (_m = 0, _len5 = _ref8.length; _m < _len5; _m++) {
           edge = _ref8[_m];
-          edge.capacity *= 2;
+          edge.capacity *= this.edgeMult;
         }
-        _ref9 = this.nodes[i][this.height - 1 - i].edges;
+        _ref9 = this.nodes[i][this.height - 1 - i];
         for (_n = 0, _len6 = _ref9.length; _n < _len6; _n++) {
           edge = _ref9[_n];
-          edge.capacity *= 2;
+          edge.capacity *= this.edgeMult;
         }
+        this.nodes[i][i].multiSink = true;
+        this.nodes[i][this.height - 1 - i].multiSink = true;
         this.nodes[i][i].addEdge(this.sink, Infinity);
-        _results.push(this.nodes[i][this.height - 1 - i].addEdge(this.sink, Infinity));
+        this.nodes[i][this.height - 1 - i].addEdge(this.sink, Infinity);
       }
-      return _results;
+      if (!this.fullGraph) {
+        for (x = 1, _ref10 = this.width - 1; 1 <= _ref10 ? x < _ref10 : x > _ref10; 1 <= _ref10 ? x++ : x--) {
+          edgeMult = this.edgeMult;
+          for (y = 0, _ref11 = this.height / 2; 0 <= _ref11 ? y < _ref11 : y > _ref11; 0 <= _ref11 ? y++ : y--) {
+            src = this.nodes[x][y];
+            if (y > 0) {
+              src.addEdge(this.nodes[x][y - 1], edgeMult * this.colorDifference(x, y, x, y - 1));
+            }
+            src.addEdge(this.nodes[x][y + 1], edgeMult * this.colorDifference(x, y, x, y + 1));
+            src.addEdge(this.nodes[x - 1][y], edgeMult * this.colorDifference(x, y, x - 1, y));
+            src.addEdge(this.nodes[x + 1][y], edgeMult * this.colorDifference(x, y, x + 1, y));
+            edgeMult *= this.edgeMultDecay;
+            if (edgeMult < 1) {
+              edgeMult = 1;
+            }
+            if (this.nodes[x][y + 1].multiSink) {
+              break;
+            }
+          }
+          edgeMult = this.edgeMult;
+          for (y = _ref12 = this.height - 1, _ref13 = this.height / 2; _ref12 <= _ref13 ? y < _ref13 : y > _ref13; _ref12 <= _ref13 ? y++ : y--) {
+            src = this.nodes[x][y];
+            if (y < this.height - 1) {
+              src.addEdge(this.nodes[x][y + 1], edgeMult * this.colorDifference(x, y, x, y + 1));
+            }
+            src.addEdge(this.nodes[x][y - 1], edgeMult * this.colorDifference(x, y, x, y - 1));
+            src.addEdge(this.nodes[x - 1][y], edgeMult * this.colorDifference(x, y, x - 1, y));
+            src.addEdge(this.nodes[x + 1][y], edgeMult * this.colorDifference(x, y, x + 1, y));
+            edgeMult *= this.edgeMultDecay;
+            if (edgeMult < 1) {
+              edgeMult = 1;
+            }
+            if (this.nodes[x][y - 1].multiSink) {
+              break;
+            }
+          }
+        }
+        _results = [];
+        for (y = 1, _ref14 = this.height - 1; 1 <= _ref14 ? y < _ref14 : y > _ref14; 1 <= _ref14 ? y++ : y--) {
+          edgeMult = this.edgeMult;
+          for (x = 0, _ref15 = this.width / 2; 0 <= _ref15 ? x < _ref15 : x > _ref15; 0 <= _ref15 ? x++ : x--) {
+            src = this.nodes[x][y];
+            if (x > 1) {
+              src.addEdge(this.nodes[x - 1][y], edgeMult * this.colorDifference(x, y, x - 1, y));
+            }
+            src.addEdge(this.nodes[x + 1][y], edgeMult * this.colorDifference(x, y, x + 1, y));
+            src.addEdge(this.nodes[x][y - 1], edgeMult * this.colorDifference(x, y, x, y - 1));
+            src.addEdge(this.nodes[x][y + 1], edgeMult * this.colorDifference(x, y, x, y + 1));
+            edgeMult *= this.edgeMultDecay;
+            if (edgeMult < 1) {
+              edgeMult = 1;
+            }
+            if (this.nodes[x + 1][y].multiSink) {
+              break;
+            }
+          }
+          edgeMult = this.edgeMult;
+          _results.push((function() {
+            var _ref16, _ref17, _results2;
+            _results2 = [];
+            for (x = _ref16 = this.width - 1, _ref17 = this.width / 2; _ref16 <= _ref17 ? x < _ref17 : x > _ref17; _ref16 <= _ref17 ? x++ : x--) {
+              src = this.nodes[x][y];
+              src.addEdge(this.nodes[x - 1][y], edgeMult * this.colorDifference(x, y, x - 1, y));
+              if (x < this.width - 1) {
+                src.addEdge(this.nodes[x + 1][y], edgeMult * this.colorDifference(x, y, x + 1, y));
+              }
+              src.addEdge(this.nodes[x][y - 1], edgeMult * this.colorDifference(x, y, x, y - 1));
+              src.addEdge(this.nodes[x][y + 1], edgeMult * this.colorDifference(x, y, x, y + 1));
+              edgeMult *= this.edgeMultDecay;
+              if (edgeMult < 1) {
+                edgeMult = 1;
+              }
+              if (this.nodes[x - 1][y].multiSink) {
+                break;
+              }
+            }
+            return _results2;
+          }).call(this));
+        }
+        return _results;
+      }
     };
     ImageGraph.prototype.computeGraft = function() {
       this.computeMaxFlow();
@@ -426,7 +522,7 @@
         node = _ref[_i];
         x = node.val.x;
         y = node.val.y;
-        imageData.setColor(x, y, [255, 0, 255, 255]);
+        imageData.setColor(x, y, [0, 255, 255, 255]);
       }
       _ref2 = this.sinkNodes;
       for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {

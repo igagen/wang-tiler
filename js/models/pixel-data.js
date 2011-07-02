@@ -71,6 +71,19 @@
       }
       return [(116 * y) - 16, 500 * (x - y), 200 * (y - z)];
     };
+    PixelData.prototype.imageDiff = function(imageData) {
+      var diff, x, y, _ref, _ref2;
+      if (this.width !== imageData.width || this.height !== imageData.height) {
+        return Infinity;
+      }
+      diff = 0;
+      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
+        for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
+          diff += this.colorDifference(this.labColor(x, y), imageData.labColor(x, y));
+        }
+      }
+      return diff / (this.width * this.height);
+    };
     PixelData.prototype.colorDifference = function(c1, c2) {
       var dL, da, db;
       dL = c2[0] - c1[0];

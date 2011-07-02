@@ -67,6 +67,10 @@ class Graph
     for i in [0...path.length - 1]
       if path[i].dest != path[i + 1].src
         throw new Error("Interior path edges must match")
+    
+    for edge in path
+      if edge.flow == Infinity
+        throw new Error "Infinite flow"
 
   printEdge: (edge) ->
     s = edge.src.val
@@ -110,10 +114,12 @@ class Graph
     @sinkNodes = []
 
     for node in @nodes
-      if node.tree == "source"
+      if node.tree == "sink"
         @sourceNodes.push(node)
-      else
+      else if node.tree == "sink"
         @sinkNodes.push(node)
+      else
+        @sourceNodes.push(node)
 
   getPath: (p, q) ->
     path = []
@@ -162,6 +168,9 @@ class Graph
     minCapacity = Infinity
     for edge in path when edge.residualCapacity() < minCapacity
       minCapacity = edge.residualCapacity()
+
+    # if minCapacity == Infinity
+    #   throw new Error "Infinite flow path"
 
     for edge in path
       edge.flow += minCapacity
@@ -238,6 +247,7 @@ class ImageGraph extends Graph
     @sink.tree = "sink"
     @active = [@source, @sink]
     @orphaned = []
+    @fullGraph = false
 
     # Initialize nodes
     @nodes = new Array @imageData1.width
@@ -246,17 +256,18 @@ class ImageGraph extends Graph
       for y in [0...@height]
         node = @nodes[x][y] = new Node { x: x, y: y }
 
-        if x > 0 # Left
-          leftNode = @nodes[x - 1][y]
-          leftColorDiff = @colorDifference x - 1, y, x, y
-          node.addEdge leftNode, leftColorDiff
-          leftNode.addEdge node, leftColorDiff
-
-        if y > 0 # Top
-          topNode = @nodes[x][y - 1]
-          topColorDiff = @colorDifference x, y - 1, x, y
-          node.addEdge topNode, topColorDiff
-          topNode.addEdge node, topColorDiff
+        if @fullGraph
+          if x > 0 # Left
+            leftNode = @nodes[x - 1][y]
+            leftColorDiff = @colorDifference x - 1, y, x, y
+            node.addEdge leftNode, leftColorDiff
+            leftNode.addEdge node, leftColorDiff
+        
+          if y > 0 # Top
+            topNode = @nodes[x][y - 1]
+            topColorDiff = @colorDifference x, y - 1, x, y
+            node.addEdge topNode, topColorDiff
+            topNode.addEdge node, topColorDiff
 
   partition: ->
     @sourceNodes = []
@@ -270,7 +281,7 @@ class ImageGraph extends Graph
         else if node.tree == "sink"
           @sinkNodes.push(node)
         else
-          @sourceNodes.push(node)
+          @sinkNodes.push(node)
           # console.debug "ERROR: (" + x + ", " + y + ") not in source or sink"
           # throw new Error "All nodes should be in the source or sink"
 
@@ -290,31 +301,100 @@ class ImageGraph extends Graph
     if @width != @height || @width % 2 != 0
       throw "Wang tiles must be square with even width and height"
 
+    @edgeMult = 4
+    @edgeMultDecay = 0.6
+
     # Add border source nodes
     for x in [0...@width]
-      # Increase of source nodes to discourage cutting paths that touch the seams
-      edge.capacity = Infinity for edge in @nodes[x][0].edges
-      edge.capacity = Infinity for edge in @nodes[x][@height - 1].edges
+      edge.capacity *= @edgeMult for edge in @nodes[x][0]
+      edge.capacity *= @edgeMult for edge in @nodes[x][@height - 1]
 
+      @nodes[x][0].multiSource = true
+      @nodes[x][@height - 1].multiSource = true
       @source.addEdge @nodes[x][0], Infinity # Top
       @source.addEdge @nodes[x][@height - 1], Infinity # Bottom
 
     for y in [0...@height]
-      # Increase weights of source nodes to discourage cutting paths that touch the seams
-      edge.capacity = Infinity for edge in @nodes[0][y].edges
-      edge.capacity = Infinity for edge in @nodes[@width - 1][y].edges
+      edge.capacity *= @edgeMult for edge in @nodes[0][y]
+      edge.capacity *= @edgeMult for edge in @nodes[@width - 1][y]
 
+      @nodes[0][y].multiSource = true
+      @nodes[@width - 1][y].multiSource = true
       @source.addEdge @nodes[0][y], Infinity # Left
       @source.addEdge @nodes[@width - 1][y], Infinity # Right
 
     # Add interior sink nodes (X-shape that divides the image into four triangles, not including 1 pixel border)
     for i in [1...@width - 1]
-      # Double weights of sink nodes to discourage cutting paths that touch the seams
-      edge.capacity *= 2 for edge in @nodes[i][i].edges
-      edge.capacity *= 2 for edge in @nodes[i][@height - 1 - i].edges
+      edge.capacity *= @edgeMult for edge in @nodes[i][i]
+      edge.capacity *= @edgeMult for edge in @nodes[i][@height - 1 - i]
 
+      @nodes[i][i].multiSink = true
+      @nodes[i][@height - 1 - i].multiSink = true
       @nodes[i][i].addEdge @sink, Infinity
       @nodes[i][@height - 1 - i].addEdge @sink, Infinity
+
+    if !@fullGraph
+      for x in [1...@width - 1]
+        edgeMult = @edgeMult
+        # Top
+        for y in [0...@height / 2]
+          src = @nodes[x][y]
+          src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1 if y > 0
+          src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
+          src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
+          src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
+          
+          edgeMult *= @edgeMultDecay
+          edgeMult = 1 if edgeMult < 1
+          
+          break if @nodes[x][y + 1].multiSink
+
+        edgeMult = @edgeMult
+
+        # Bottom
+        for y in [@height - 1...@height / 2]
+          src = @nodes[x][y]
+          src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1 if y < @height - 1
+          src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
+          src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
+          src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
+          
+          edgeMult *= @edgeMultDecay
+          edgeMult = 1 if edgeMult < 1
+          
+          break if @nodes[x][y - 1].multiSink
+
+      for y in [1...@height - 1]
+        
+        edgeMult = @edgeMult
+        
+        # Left
+        for x in [0...@width / 2]
+          src = @nodes[x][y]
+          src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y if x > 1
+          src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
+          src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
+          src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
+          
+          edgeMult *= @edgeMultDecay
+          edgeMult = 1 if edgeMult < 1
+          
+          break if @nodes[x + 1][y].multiSink
+
+        edgeMult = @edgeMult
+
+        # Right
+        for x in [@width - 1...@width / 2]
+          src = @nodes[x][y]
+          src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
+          src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y if x < @width - 1
+          src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
+          src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
+          
+          edgeMult *= @edgeMultDecay
+          edgeMult = 1 if edgeMult < 1
+          
+          break if @nodes[x - 1][y].multiSink
 
   computeGraft: ->
     @computeMaxFlow()
@@ -327,7 +407,7 @@ class ImageGraph extends Graph
     for node in @sourceNodes
       x = node.val.x
       y = node.val.y
-      imageData.setColor x, y, [255, 0, 255, 255]
+      imageData.setColor x, y, [0, 255, 255, 255]
 
     for node in @sinkNodes
       x = node.val.x
@@ -349,6 +429,7 @@ class ImageGraph extends Graph
       x = node.val.x
       y = node.val.y
       imageData.setColor(x, y, @imageData2.color(x, y))
+      # imageData.setColor(x, y, [255, 0, 255, 255])
 
     context.putImageData imageData.rawImageData, 0, 0
 
