@@ -7,30 +7,27 @@ describe "Graph", ->
       @active = @graph.active
       @orphaned = @graph.orphaned
 
-      @a = new Node "A"
-      @b = new Node "B"
-
       # Add nodes
-      @graph.addNode @a
-      @graph.addNode @b
+      @a = @graph.addNode "A"
+      @b = @graph.addNode "B"
 
       # Add edges
-      @sourceToA = @source.addEdge @a, 4
-      @sourceToB = @source.addEdge @b, 3
-      @aToB = @a.addEdge @b, 3
-      @aToSink = @a.addEdge @sink, 4
-      @bToSink = @b.addEdge @sink, 5
+      @sourceToA = @graph.addEdge @source, @a, 4
+      @sourceToB = @graph.addEdge @source, @b, 3
+      @aToB = @graph.addEdge @a, @b, 3
+      @aToSink = @graph.addEdge @a, @sink, 4
+      @bToSink = @graph.addEdge @b, @sink, 5
 
     describe "maxFlow", ->
       it "should determine the correct max flow", ->
-        maxFlow = @graph.computeMaxFlow()
-        expect(maxFlow).toBe 7
+        @graph.solve()
+        expect(@graph.maxFlow()).toBe 7
 
       it "should correctly partition the nodes along the min-cut", ->
-        maxFlow = @graph.computeMaxFlow()
-        @graph.partition()
-        expect(@graph.sourceNodes).toEqual [@source]
-        expect(@graph.sinkNodes).toHaveSameElementsAs [@a, @b, @sink]
+        @graph.solve()
+        partition = @graph.partition()
+        expect(partition[0]).toEqual [@source]
+        expect(partition[1]).toHaveSameElementsAs [@a, @b, @sink]
 
     describe "internal methods", ->
       it "should perform correct intermediate calculations", ->
@@ -38,70 +35,71 @@ describe "Graph", ->
         # of the algorithm behave as expected at each step
 
         # Grow
-        # path = @graph.grow()
-        # 
-        # expect(path).toEqual [@sourceToA, @aToSink]
-        # expect(@active).toEqual [@sink, @a, @b]
-        # 
+        path = @graph.grow()
+
+        expect(path).toEqual [@source, @a, @sink]
+        expect(@active).toEqual [@sink, @a, @b]
+
+        # Augment
+        expect(@sourceToA.flow).toBe 0
+        expect(@aToSink.flow).toBe 0
+
+        @graph.augment path
+
+        expect(@a.tree).toBe "source"
+        expect(@b.tree).toBe "source"
+        expect(@a.parentId).toBe null
+        expect(@sourceToA.flow).toBe 4
+        expect(@aToSink.flow).toBe 4
+        expect(@orphaned).toEqual [@a]
+
+        # Adopt
+        @graph.adopt()
+
+        expect(@active).toEqual [@sink, @b]
+        expect(@orphaned.length).toBe 0
+        expect(@a.parentId).toBeNull()
+        expect(@b.parentId).toBe @source.id
+
+        # Grow
+        path = @graph.grow()
+
+        expect(@active).toEqual [@sink, @b]
+        expect(path).toEqual [@source, @b, @sink]
+
         # # Augment
-        # expect(path[0].flow).toBe 0
-        # expect(path[1].flow).toBe 0
-        # 
-        # @graph.augment path
-        # 
-        # expect(@a.tree).toBe "source"
-        # expect(@b.tree).toBe "source"
-        # expect(@a.parent == null && @a.parentEdge == null).toBe true
-        # expect(path[0].flow).toBe 4
-        # expect(path[1].flow).toBe 4
-        # expect(@orphaned).toEqual [@a]
-        # 
-        # # Adopt
-        # @graph.adopt()
-        # 
-        # expect(@active).toEqual [@sink, @a, @b]
-        # expect(@orphaned.length).toBe 0
-        # expect(@a.parent).toBe @b
-        # expect(@b.parent).toBe @source
-        # 
-        # # Grow
-        # path = @graph.grow()
-        # 
-        # expect(@active).toEqual [@sink, @a, @b]
-        # expect(path).toEqual [@sourceToB, @bToSink]
-        # 
-        # # Augment
-        # expect(path[0].flow).toBe 0
-        # expect(path[1].flow).toBe 0
-        # 
-        # @graph.augment path
-        # 
-        # expect(path[0].flow == 3 && path[1].flow == 3).toBe true
-        # expect(@b.parent).toBeNull()
-        # expect(@orphaned).toEqual [@b]
-        # 
-        # # Adopt
-        # @graph.adopt()
-        # 
-        # expect(@orphaned.length).toBe 0
-        # expect(@active).toEqual [@sink]
-        # expect(@a.tree).toBeNull()
-        # expect(@b.tree).toBeNull()
-        # 
-        # # Grow
-        # path = @graph.grow()
-        # 
-        # expect(path.length).toBe 0
-        # expect(@active.length).toBe 0
-        # expect(@orphaned.length).toBe 0
-        # expect(@a.parent).toBe @b
-        # expect(@b.parent).toBe @sink
-        # 
-        # expect(@sourceToA.flow).toBe 4
-        # expect(@sourceToB.flow).toBe 3
-        # expect(@aToB.flow).toBe 0
-        # expect(@aToSink.flow).toBe 4
-        # expect(@bToSink.flow).toBe 3
+        expect(@sourceToB.flow).toBe 0
+        expect(@bToSink.flow).toBe 0
+
+        @graph.augment path
+
+        expect(@sourceToB.flow).toBe 3
+        expect(@bToSink.flow).toBe 3
+        expect(@b.parentId).toBeNull()
+        expect(@orphaned).toEqual [@b]
+
+        # Adopt
+        @graph.adopt()
+
+        expect(@orphaned.length).toBe 0
+        expect(@active).toEqual [@sink]
+        expect(@a.tree).toBeNull()
+        expect(@b.tree).toBeNull()
+
+        # Grow
+        path = @graph.grow()
+
+        expect(path.length).toBe 0
+        expect(@active.length).toBe 0
+        expect(@orphaned.length).toBe 0
+        expect(@a.parentId).toBe @b.id
+        expect(@b.parentId).toBe @sink.id
+
+        expect(@sourceToA.flow).toBe 4
+        expect(@sourceToB.flow).toBe 3
+        expect(@aToB.flow).toBe 0
+        expect(@aToSink.flow).toBe 4
+        expect(@bToSink.flow).toBe 3
 
   describe "Complex flow network", ->
     beforeEach ->
@@ -111,29 +109,73 @@ describe "Graph", ->
       @active = @graph.active
       @orphaned = @graph.orphaned
 
-      # Add flags for checking state during the algorithm
-      @source.source = true
-      @sink.sink = true
-
       # Add nodes
-      @a = @graph.addNode(new Node "A")
-      @b = @graph.addNode(new Node "B")
-      @c = @graph.addNode(new Node "C")
-      @d = @graph.addNode(new Node "D")
+      @a = @graph.addNode "A"
+      @b = @graph.addNode "B"
+      @c = @graph.addNode "C"
+      @d = @graph.addNode "D"
 
       # Add edges
-      @sourceToA = @source.addEdge @a, 16
-      @sourceToB = @source.addEdge @b, 13
-      @aToB = @a.addEdge @b, 10
-      @bToA = @b.addEdge @a, 4
-      @aToC = @a.addEdge @c, 12
-      @bToD = @b.addEdge @d, 14
-      @cToB = @c.addEdge @b, 9
-      @dToC = @d.addEdge @c, 7
-      @cToSink = @c.addEdge @sink, 20
-      @dToSink = @d.addEdge @sink, 4
+      @sourceToA = @graph.addEdge @source, @a, 16
+      @sourceToB = @graph.addEdge @source, @b, 13
+      @aToB = @graph.addEdge @a, @b, 10
+      @bToA = @graph.addEdge @b, @a, 4
+      @aToC = @graph.addEdge @a, @c, 12
+      @bToD = @graph.addEdge @b, @d, 14
+      @cToB = @graph.addEdge @c, @b, 9
+      @dToC = @graph.addEdge @d, @c, 7
+      @cToSink = @graph.addEdge @c, @sink, 20
+      @dToSink = @graph.addEdge @d, @sink, 4
 
     describe "maxFlow", ->
       it "should determine the correct max flow", ->
-        maxFlow = @graph.computeMaxFlow()
-        expect(maxFlow).toBe 23
+        @graph.solve()
+        expect(@graph.maxFlow()).toBe 23
+
+  describe "addFlow", ->
+    beforeEach ->
+      @graph = new Graph
+      @a = @graph.addNode "A"
+      @b = @graph.addNode "B"
+
+    describe "when only the given edge is present in the graph", ->
+      beforeEach -> @aToB = @graph.addEdge @a, @b, 10
+
+      it "should update the given edge's flow correctly", ->
+        @graph.addFlow @a, @b, 6
+        expect(@aToB.flow).toBe 6
+
+      it "should update residual capacities correctly", ->
+        @graph.addFlow @a, @b, 6
+        expect(@graph.residualCapacity @a, @b).toBe 4
+        expect(@graph.residualCapacity @b, @a).toBe 6
+
+    describe "when only the reverse edge is present in the graph", ->
+      beforeEach ->
+        @bToA = @graph.addEdge @b, @a, 4
+        @graph.addFlow @b, @a, 4
+        expect(@bToA.flow).toBe 4
+
+      it "should update reverse edge's flow correctly", ->
+        @graph.addFlow @a, @b, 4
+        expect(@bToA.flow).toBe 0
+
+    describe "when the given edge and the reverse edge are present in the graph", ->
+      beforeEach ->
+
+        @aToB = @graph.addEdge @a, @b, 10
+        @bToA = @graph.addEdge @b, @a, 4
+        @graph.addFlow @b, @a, 4
+
+        expect(@graph.residualCapacity @a, @b).toBe 14
+        expect(@graph.residualCapacity @b, @a).toBe 0
+        expect(@aToB.flow).toBe 0
+        expect(@bToA.flow).toBe 4
+
+      it "updates both edges as appropriate", ->
+        @graph.addFlow @a, @b, 14
+
+        expect(@graph.residualCapacity @a, @b).toBe 0
+        expect(@graph.residualCapacity @b, @a).toBe 14
+        expect(@aToB.flow).toBe 10
+        expect(@bToA.flow).toBe 0

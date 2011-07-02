@@ -9,236 +9,285 @@
     return child;
   };
   Node = (function() {
-    function Node(val) {
-      this.val = val;
-      this.parent = null;
-      this.parentEdge = null;
-      this.tree = null;
-      this.edges = [];
+    function Node(id, val) {
+      this.id = id;
+      if (val == null) {
+        val = null;
+      }
+      if (val != null) {
+        this.val = val;
+      }
     }
-    Node.prototype.addEdge = function(node, capacity) {
-      var edge;
-      edge = new Edge(this, node, capacity);
-      this.edges.push(edge);
-      node.edges.push(edge);
-      return edge;
-    };
     return Node;
   })();
   Edge = (function() {
-    function Edge(src, dest, capacity) {
-      this.src = src;
-      this.dest = dest;
+    function Edge(capacity) {
       this.capacity = capacity;
-      this.flow = 0;
     }
-    Edge.prototype.residualCapacity = function() {
-      return this.capacity - this.flow;
-    };
-    Edge.prototype.saturated = function() {
-      return this.flow === this.capacity;
-    };
     return Edge;
   })();
   Graph = (function() {
+    Graph.prototype.SOURCE = "source";
+    Graph.prototype.SINK = "sink";
+    Graph.prototype.ROUNDING_TOLERANCE = 0.001;
     function Graph() {
-      this.nodes = [];
-      this.source = this.addNode(new Node("source"));
-      this.sink = this.addNode(new Node("sink"));
-      this.source.tree = "source";
-      this.sink.tree = "sink";
+      this.numNodes = 0;
+      this.nodes = {};
+      this.edges = {};
+      this.residualEdges = {};
+      this.source = this.addNode(this.SOURCE, this.SOURCE);
+      this.sink = this.addNode(this.SINK, this.SINK);
+      this.source.tree = this.SOURCE;
+      this.sink.tree = this.SINK;
       this.active = [this.source, this.sink];
       this.orphaned = [];
     }
-    Graph.prototype.addNode = function(node) {
-      this.nodes.push(node);
+    Graph.prototype.addNode = function(val, id) {
+      var node;
+      if (id == null) {
+        id = null;
+      }
+      if ((id != null) && (this.nodes[id] != null)) {
+        throw new Error("Duplicate node");
+      }
+            if (id != null) {
+        id;
+      } else {
+        id = this.numNodes++;
+      };
+      this.nodes[id] = new Node(id, val);
+      node = this.nodes[id];
+      node.tree = null;
+      node.parentId = null;
       return node;
     };
-    Graph.prototype.setParent = function(node, parent, edge) {
-      if (parent.tree === null) {
-        throw new Error("Can't set parent to a node with no tree");
+    Graph.prototype.addEdge = function(p, q, capacity) {
+      var edge, _base, _base2, _base3, _base4, _base5, _name, _name2, _name3, _name4, _name5, _ref, _ref2, _ref3, _ref4, _ref5, _ref6;
+      if ((_ref = this.edges[p.id]) != null ? _ref[q.id] : void 0) {
+        debugger;
+        throw new Error("Duplicate edge");
       }
-      if (parent.tree === "source" && (edge.src !== parent || edge.dest !== node)) {
-        throw new Error("Invalid edge");
+      edge = new Edge(capacity);
+            if ((_ref2 = (_base = this.edges)[_name = p.id]) != null) {
+        _ref2;
+      } else {
+        _base[_name] = {};
+      };
+      this.edges[p.id][q.id] = edge;
+      edge.flow = 0;
+      if (p.id === void 0 || q.id === void 0) {
+        debugger;
+        throw new Error("Bad node in call to addEdge");
       }
-      if (parent.tree === "sink" && (edge.dest !== parent || edge.src !== node)) {
-        throw new Error("Invalid edge");
-      }
-      node.parent = parent;
-      node.parentEdge = edge;
-      return node.tree = parent.tree;
+            if ((_ref3 = (_base2 = this.residualEdges)[_name2 = p.id]) != null) {
+        _ref3;
+      } else {
+        _base2[_name2] = {};
+      };
+            if ((_ref4 = (_base3 = this.residualEdges)[_name3 = q.id]) != null) {
+        _ref4;
+      } else {
+        _base3[_name3] = {};
+      };
+            if ((_ref5 = (_base4 = this.residualEdges[p.id])[_name4 = q.id]) != null) {
+        _ref5;
+      } else {
+        _base4[_name4] = new Edge(0);
+      };
+            if ((_ref6 = (_base5 = this.residualEdges[q.id])[_name5 = p.id]) != null) {
+        _ref6;
+      } else {
+        _base5[_name5] = new Edge(0);
+      };
+      this.residualEdges[p.id][q.id].capacity += capacity;
+      return edge;
     };
-    Graph.prototype.orphan = function(node) {
-      node.parentEdge = null;
-      node.parent = null;
-      if (this.orphaned.indexOf(node) === -1) {
-        return this.orphaned.push(node);
-      }
+    Graph.prototype.setMultiSource = function(p) {
+      p.multiSource = true;
+      return this.addEdge(this.source, p, Infinity);
     };
-    Graph.prototype.validatePath = function(path) {
-      var edge, i, _i, _len, _ref, _results;
-      if (path.length === 0) {
-        return;
-      }
-      if (path[0].src !== this.source) {
-        throw new Error("Path must start at source");
-      }
-      if (path[path.length - 1].dest !== this.sink) {
-        throw new Error("Path must start at sink");
-      }
-      for (i = 0, _ref = path.length - 1; 0 <= _ref ? i < _ref : i > _ref; 0 <= _ref ? i++ : i--) {
-        if (path[i].dest !== path[i + 1].src) {
-          throw new Error("Interior path edges must match");
-        }
-      }
+    Graph.prototype.setMultiSink = function(p) {
+      p.multiSink = true;
+      return this.addEdge(p, this.sink, Infinity);
+    };
+    Graph.prototype.solve = function() {
+      var path, _results;
       _results = [];
-      for (_i = 0, _len = path.length; _i < _len; _i++) {
-        edge = path[_i];
-        _results.push((function() {
-          if (edge.flow === Infinity) {
-            throw new Error("Infinite flow");
-          }
-        })());
-      }
-      return _results;
-    };
-    Graph.prototype.printEdge = function(edge) {
-      var d, s;
-      s = edge.src.val;
-      d = edge.dest.val;
-      return console.debug("" + (s.x !== void 0 ? "(" + s.x + ", " + s.y + ") - " : "(" + s + ") - ") + " " + (d.x !== void 0 ? "(" + d.x + ", " + d.y + "): " : "(" + d + "): ") + " " + edge.flow + " / " + edge.capacity);
-    };
-    Graph.prototype.printPath = function(path) {
-      var edge, _i, _len, _results;
-      console.debug("-------- Path -------");
-      _results = [];
-      for (_i = 0, _len = path.length; _i < _len; _i++) {
-        edge = path[_i];
-        _results.push(this.printEdge(edge));
-      }
-      return _results;
-    };
-    Graph.prototype.sourceFlow = function() {
-      var edge, sourceFlow, _i, _len, _ref;
-      sourceFlow = 0;
-      _ref = this.source.edges;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        edge = _ref[_i];
-        sourceFlow += edge.flow;
-      }
-      return sourceFlow;
-    };
-    Graph.prototype.sinkFlow = function() {
-      var edge, sinkFlow, _i, _len, _ref;
-      sinkFlow = 0;
-      _ref = this.source.edges;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        edge = _ref[_i];
-        sinkFlow += edge.flow;
-      }
-      return sinkFlow;
-    };
-    Graph.prototype.validateFlow = function() {
-      if (this.sourceFlow() !== this.sinkFlow()) {
-        throw new Error("Source and sink flows don't match");
-      }
-    };
-    Graph.prototype.computeMaxFlow = function() {
-      var path;
       while (true) {
         path = this.grow();
+        this.printPath(path);
         if (path.length === 0) {
           break;
         } else {
           this.augment(path);
         }
-        this.validateFlow();
-        this.adopt();
-      }
-      this.validateFlow();
-      return this.maxFlow = this.sourceFlow();
-    };
-    Graph.prototype.partition = function() {
-      var node, _i, _len, _ref, _results;
-      this.sourceNodes = [];
-      this.sinkNodes = [];
-      _ref = this.nodes;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        node = _ref[_i];
-        _results.push(node.tree === "sink" ? this.sourceNodes.push(node) : node.tree === "sink" ? this.sinkNodes.push(node) : this.sourceNodes.push(node));
+        _results.push(this.adopt());
       }
       return _results;
     };
-    Graph.prototype.getPath = function(p, q) {
-      var edge, path, sinkNode, sourceNode, _i, _len, _ref;
-      path = [];
-      if (p.tree === "source") {
-        sourceNode = p;
-        sinkNode = q;
-      } else {
-        sourceNode = q;
-        sinkNode = p;
+    Graph.prototype.maxFlow = function() {
+      var flow, id;
+      flow = 0;
+      for (id in this.edges[this.source.id]) {
+        flow += this.edges[this.source.id][id].flow;
       }
-      _ref = sourceNode.edges;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        edge = _ref[_i];
-        if (edge.dest === sinkNode) {
-          path.push(edge);
-          break;
+      return flow;
+    };
+    Graph.prototype.partition = function() {
+      var id, p;
+      this.sourceNodes = [];
+      this.sinkNodes = [];
+      for (id in this.nodes) {
+        p = this.nodes[id];
+        if (p.tree == null) {
+          console.debug("Unclassified node '" + p.id + "'");
+          this.sourceNodes.push(p);
+        }
+        if (p.tree === this.SOURCE) {
+          this.sourceNodes.push(p);
+        }
+        if (p.tree === this.SINK) {
+          this.sinkNodes.push(p);
         }
       }
-      while (sourceNode.parent) {
-        path.unshift(sourceNode.parentEdge);
-        sourceNode = sourceNode.parent;
-      }
-      while (sinkNode.parent) {
-        path.push(sinkNode.parentEdge);
-        sinkNode = sinkNode.parent;
-      }
-      this.validatePath(path);
-      return path;
+      return [this.sourceNodes, this.sinkNodes];
     };
     Graph.prototype.grow = function() {
-      var edge, p, q, _i, _len, _ref;
+      var p, q, _i, _len, _ref, _ref2;
       while (this.active.length) {
         p = this.active[0];
-        q = null;
-        _ref = p.edges;
+        _ref = this.neighbors(p);
         for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          edge = _ref[_i];
-          if (edge.residualCapacity() > 0) {
-            if (p.tree === "source" && edge.src === p || p.tree === "sink" && edge.dest === p) {
-              q = (edge.src === p ? edge.dest : edge.src);
-              if (q.tree === null) {
-                this.setParent(q, p, edge);
-                this.addActive(q);
-              } else if (q.tree !== p.tree) {
-                return this.getPath(p, q);
-              }
+          q = _ref[_i];
+          if (this.treeCapacity(p, q) > 0) {
+            if (q.tree === null) {
+              this.setTree(q, p.tree);
+              this.setParent(q, p);
+              this.addActive(q);
+            } else if ((q.tree !== (_ref2 = p.tree) && _ref2 !== null)) {
+              return this.getPath(p, q);
             }
           }
         }
-        this.active.shift();
+        this.removeActive(p);
       }
       return [];
     };
-    Graph.prototype.augment = function(path) {
-      var edge, minCapacity, _i, _j, _len, _len2, _results;
-      minCapacity = Infinity;
-      for (_i = 0, _len = path.length; _i < _len; _i++) {
-        edge = path[_i];
-        if (edge.residualCapacity() < minCapacity) {
-          minCapacity = edge.residualCapacity();
+    Graph.prototype.getPath = function(p, q) {
+      var path, sinkNode, sourceNode;
+      if (p.tree === null || q.tree === null || p.tree === q.tree) {
+        throw new Error("Invalid nodes in call to getPath - p and q must be from different trees");
+      }
+      path = [];
+      if (p.tree === this.SOURCE) {
+        sourceNode = p;
+      } else {
+        sourceNode = q;
+      }
+      while (true) {
+        path.unshift(sourceNode);
+        if (sourceNode.parentId != null) {
+          sourceNode = this.nodes[sourceNode.parentId];
+        } else {
+          break;
         }
       }
+      if (p.tree === this.SINK) {
+        sinkNode = p;
+      } else {
+        sinkNode = q;
+      }
+      while (true) {
+        path.push(sinkNode);
+        if (sinkNode.parentId != null) {
+          sinkNode = this.nodes[sinkNode.parentId];
+        } else {
+          break;
+        }
+      }
+      return path;
+    };
+    Graph.prototype.augment = function(path) {
+      return this.addFlowToPath(path, this.bottleneckCapacity(path));
+    };
+    Graph.prototype.clamp = function(val, clamp) {
+      if (val > clamp - this.ROUNDING_TOLERANCE && val < clamp + this.ROUNDING_TOLERANCE) {
+        return clamp;
+      } else {
+        return val;
+      }
+    };
+    Graph.prototype.addResidualCapacity = function(p, q, capacity) {
+      return this.residualEdges[p.id][q.id].capacity += capacity;
+    };
+    Graph.prototype.removeResidualCapacity = function(p, q, capacity) {
+      this.residualEdges[p.id][q.id].capacity = this.clamp(this.residualCapacity(p, q) - capacity, 0);
+      if (this.residualCapacity(p, q) < 0) {
+        throw new Error("Negative residual capacity");
+      }
+    };
+    Graph.prototype.addFlow = function(p, q, flow) {
+      var edge, edgeCapacity, _ref, _ref2, _ref3, _ref4;
+      this.removeResidualCapacity(p, q, flow);
+      this.addResidualCapacity(q, p, flow);
+      if (this.residualCapacity(p, q) === 0) {
+        if ((p.tree === (_ref = q.tree) && _ref === this.SOURCE)) {
+          this.addOrphan(q);
+        }
+        if ((p.tree === (_ref2 = q.tree) && _ref2 === this.SINK)) {
+          this.addOrphan(p);
+        }
+      }
+      edge = (_ref3 = this.edges[p.id]) != null ? _ref3[q.id] : void 0;
+      edgeCapacity = 0;
+      if (edge != null) {
+        edgeCapacity = edge.capacity - edge.flow;
+        if (edgeCapacity < flow) {
+          edge.flow += edgeCapacity;
+          flow -= edgeCapacity;
+        } else {
+          edge.flow += flow;
+          flow = 0;
+        }
+      }
+      if (flow > 0) {
+        edge = (_ref4 = this.edges[q.id]) != null ? _ref4[p.id] : void 0;
+        if (edge != null) {
+          edge.flow -= flow;
+          return edge.flow = this.clamp(edge.flow, 0);
+        }
+      }
+    };
+    Graph.prototype.addFlowToPath = function(path, flow) {
+      var i, _ref, _results;
       _results = [];
-      for (_j = 0, _len2 = path.length; _j < _len2; _j++) {
-        edge = path[_j];
-        edge.flow += minCapacity;
-        _results.push(edge.saturated ? edge.src.tree === edge.dest.tree ? edge.src.tree === "source" ? this.orphan(edge.dest) : edge.src.tree === "sink" ? this.orphan(edge.src) : void 0 : void 0 : void 0);
+      for (i = 0, _ref = path.length - 1; 0 <= _ref ? i < _ref : i > _ref; 0 <= _ref ? i++ : i--) {
+        _results.push(this.addFlow(path[i], path[i + 1], flow));
       }
       return _results;
+    };
+    Graph.prototype.residualCapacity = function(p, q) {
+      return this.residualEdges[p.id][q.id].capacity;
+    };
+    Graph.prototype.bottleneckCapacity = function(path) {
+      var capacity, i, minCapacity, p, q, _ref;
+      minCapacity = Infinity;
+      for (i = 0, _ref = path.length - 1; 0 <= _ref ? i < _ref : i > _ref; 0 <= _ref ? i++ : i--) {
+        p = path[i];
+        q = path[i + 1];
+        capacity = this.residualCapacity(p, q);
+        if (capacity < minCapacity) {
+          minCapacity = capacity;
+        }
+      }
+      if (minCapacity === Infinity) {
+        throw new Error("Infinite capacity path");
+      }
+      if (minCapacity <= 0) {
+        debugger;
+        throw new Error("No residual capacity in this path");
+      }
+      return minCapacity;
     };
     Graph.prototype.adopt = function() {
       var _results;
@@ -248,55 +297,149 @@
       }
       return _results;
     };
-    Graph.prototype.attemptParent = function(p, edge) {
-      var n, q;
-      if (p.tree === "source" && edge.src === p || p.tree === "sink" && edge.dest === p) {
-        return false;
+    Graph.prototype.process = function(p) {
+      var q, _i, _len, _ref;
+      if (this.findParent(p)) {
+        return;
       }
-      q = (p === edge.src ? edge.dest : edge.src);
-      if (p.tree === q.tree && edge.residualCapacity() > 0) {
-        n = q;
-        while (n.parent) {
-          if (n.parent === this.source || n.parent === this.sink) {
-            this.setParent(p, q, edge);
-            return true;
+      _ref = this.neighbors(p);
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        q = _ref[_i];
+        if (q.tree === p.tree) {
+          if (this.treeCapacity(q, p) > 0) {
+            this.addActive(q);
           }
-          n = n.parent;
+          if (q.parentId === p.id) {
+            this.addOrphan(q);
+          }
         }
       }
-      return false;
+      this.setTree(p, null);
+      return this.removeActive(p);
+    };
+    Graph.prototype.setTree = function(p, tree) {
+      return p.tree = tree;
+    };
+    Graph.prototype.setParent = function(child, parent) {
+      if (parent.tree == null) {
+        throw new Error("Invalid parent");
+      }
+      if (parent != null) {
+        return child.parentId = parent.id;
+      } else {
+        return child.parentId = null;
+      }
+    };
+    Graph.prototype.neighbors = function(p) {
+      var id, nodes;
+      nodes = [];
+      for (id in this.residualEdges[p.id]) {
+        if (this.nodes[id] === void 0) {
+          debugger;
+          throw "Undefined edge";
+        } else {
+          nodes.push(this.nodes[id]);
+        }
+      }
+      return nodes;
+    };
+    Graph.prototype.treeCapacity = function(p, q) {
+      if (!p || !q) {
+        debugger;
+        throw new Error("Invalid node in call to treeCapacity");
+      }
+      if (p.tree === this.SOURCE) {
+        return this.residualEdges[p.id][q.id].capacity;
+      } else if (p.tree === this.SINK) {
+        return this.residualEdges[q.id][p.id].capacity;
+      } else {
+        throw new Error("treeCapacity called on node with no tree");
+      }
+    };
+    Graph.prototype.addOrphan = function(p) {
+      if (this.orphaned.indexOf(p) !== -1) {
+        throw new Error("Node is already in the orphaned list");
+      }
+      p.parentId = null;
+      return this.orphaned.push(p);
     };
     Graph.prototype.addActive = function(p) {
       if (this.active.indexOf(p) === -1) {
         return this.active.push(p);
       }
     };
-    Graph.prototype.process = function(p) {
-      var edge, q, _i, _j, _len, _len2, _ref, _ref2;
-      _ref = p.edges;
+    Graph.prototype.removeActive = function(p) {
+      var i;
+      i = this.active.indexOf(p);
+      if (i === -1) {
+        console.debug("Attempted to remove active node that was not active");
+      }
+      return this.active.splice(i, 1);
+    };
+    Graph.prototype.findParent = function(p) {
+      var q, _i, _len, _ref;
+      _ref = this.neighbors(p);
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        edge = _ref[_i];
-        if (p.tree === "source" && edge.dest === p || p.tree === "sink" && edge.src === p) {
-          if (this.attemptParent(p, edge)) {
-            return;
-          }
+        q = _ref[_i];
+        if (q.tree === p.tree && this.treeCapacity(q, p) > 0 && this.isRooted(q)) {
+          this.setParent(p, q);
+          return true;
         }
       }
-      _ref2 = p.edges;
-      for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
-        edge = _ref2[_j];
-        q = p === edge.src ? edge.dest : edge.src;
-        if (p.tree === q.tree) {
-          if (edge.residualCapacity() > 0) {
-            this.addActive(q);
-          }
-          if (q.parent === p) {
-            this.orphan(q);
-          }
+      return false;
+    };
+    Graph.prototype.isRooted = function(p) {
+      while (p.parent != null) {
+        if (q.parentId === this.SOURCE || q.parentId === this.SINK) {
+          return true;
         }
       }
-      p.tree = null;
-      return this.active.splice(this.active.indexOf(p), 1);
+      return false;
+    };
+    Graph.prototype.validatePath = function(path) {
+      var edge, i, _ref, _results;
+      if (path.length === 0) {
+        return true;
+      }
+      if (path[0] !== this.source) {
+        throw new Error("Path must start at source");
+      }
+      if (path[path.length - 1] !== this.sink) {
+        throw new Error("Path must end at sink");
+      }
+      _results = [];
+      for (i = 0, _ref = path.length - 1; 0 <= _ref ? i < _ref : i > _ref; 0 <= _ref ? i++ : i--) {
+        edge = this.edges[path[i].id][path[i + 1].id];
+        if (edge == null) {
+          throw new Error("Path has a gap");
+        }
+        _results.push((function() {
+          if (edge.flow === Infinity) {
+            throw new Error("Infinite flow");
+          }
+        })());
+      }
+      return _results;
+    };
+    Graph.prototype.validateFlow = function() {
+      if (this.sourceFlow() !== this.sinkFlow()) {
+        throw new Error("Source and sink flows don't match");
+      }
+    };
+    Graph.prototype.printPath = function(path) {
+      var p, pathVals, _i, _len;
+      pathVals = [];
+      for (_i = 0, _len = path.length; _i < _len; _i++) {
+        p = path[_i];
+        if (p === this.source) {
+          pathVals.push("SOURCE");
+        } else if (p === this.sink) {
+          pathVals.push("SINK");
+        } else {
+          pathVals.push("(" + p.val.x + "," + p.val.y + ")");
+        }
+      }
+      return console.debug(pathVals.join(" - "));
     };
     return Graph;
   })();
@@ -304,6 +447,7 @@
     __extends(ImageGraph, Graph);
     function ImageGraph(imageData1, imageData2) {
       var leftColorDiff, leftNode, node, topColorDiff, topNode, x, y, _ref, _ref2;
+      ImageGraph.__super__.constructor.call(this);
       if (imageData1.width !== imageData2.width || imageData1.height !== imageData2.height) {
         throw "Image dimensions don't match";
       }
@@ -311,55 +455,34 @@
       this.imageData2 = new PixelData(imageData2);
       this.width = this.imageData1.width;
       this.height = this.imageData1.height;
-      this.source = new Node("source");
-      this.sink = new Node("sink");
-      this.source.tree = "source";
-      this.sink.tree = "sink";
-      this.active = [this.source, this.sink];
-      this.orphaned = [];
-      this.fullGraph = false;
-      this.nodes = new Array(this.imageData1.width);
-      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
-        this.nodes[x] = new Array(this.imageData1.height);
-        for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
-          node = this.nodes[x][y] = new Node({
+      this.edgeMult = 1;
+      this.edgeMultDecay = 1;
+      this.fullGraph = true;
+      for (y = 0, _ref = this.height; 0 <= _ref ? y < _ref : y > _ref; 0 <= _ref ? y++ : y--) {
+        for (x = 0, _ref2 = this.width; 0 <= _ref2 ? x < _ref2 : x > _ref2; 0 <= _ref2 ? x++ : x--) {
+          node = this.addNode({
             x: x,
             y: y
           });
           if (this.fullGraph) {
             if (x > 0) {
-              leftNode = this.nodes[x - 1][y];
+              leftNode = this.getNode(x - 1, y);
               leftColorDiff = this.colorDifference(x - 1, y, x, y);
-              node.addEdge(leftNode, leftColorDiff);
-              leftNode.addEdge(node, leftColorDiff);
+              this.addEdge(leftNode, node, leftColorDiff);
+              this.addEdge(node, leftNode, leftColorDiff);
             }
             if (y > 0) {
-              topNode = this.nodes[x][y - 1];
+              topNode = this.getNode(x, y - 1);
               topColorDiff = this.colorDifference(x, y - 1, x, y);
-              node.addEdge(topNode, topColorDiff);
-              topNode.addEdge(node, topColorDiff);
+              this.addEdge(node, topNode, topColorDiff);
+              this.addEdge(topNode, node, topColorDiff);
             }
           }
         }
       }
     }
-    ImageGraph.prototype.partition = function() {
-      var node, x, y, _ref, _results;
-      this.sourceNodes = [];
-      this.sinkNodes = [];
-      _results = [];
-      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
-        _results.push((function() {
-          var _ref2, _results2;
-          _results2 = [];
-          for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
-            node = this.nodes[x][y];
-            _results2.push(node.tree === "source" ? this.sourceNodes.push(node) : node.tree === "sink" ? this.sinkNodes.push(node) : this.sinkNodes.push(node));
-          }
-          return _results2;
-        }).call(this));
-      }
-      return _results;
+    ImageGraph.prototype.getNode = function(x, y) {
+      return this.nodes[y * this.height + x];
     };
     ImageGraph.prototype.colorDifference = function(sx, sy, tx, ty) {
       var s1, s2, t1, t2;
@@ -369,148 +492,58 @@
       t2 = this.imageData2.labColor(tx, ty);
       return this.imageData1.colorDifference(s1, s2) + this.imageData1.colorDifference(t1, t2);
     };
-    ImageGraph.prototype.getNode = function(x, y) {
-      return this.nodes[x][y];
-    };
     ImageGraph.prototype.initWangTile = function() {
-      var edge, edgeMult, i, src, x, y, _i, _j, _k, _l, _len, _len2, _len3, _len4, _len5, _len6, _m, _n, _ref, _ref10, _ref11, _ref12, _ref13, _ref14, _ref15, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9, _results;
+      var edge, i, x, y, _i, _j, _k, _l, _len, _len2, _len3, _len4, _len5, _len6, _m, _n, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9, _results;
       if (this.width !== this.height || this.width % 2 !== 0) {
         throw "Wang tiles must be square with even width and height";
       }
-      this.edgeMult = 4;
-      this.edgeMultDecay = 0.6;
       for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
-        _ref2 = this.nodes[x][0];
+        _ref2 = this.getNode(x, 0);
         for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
           edge = _ref2[_i];
           edge.capacity *= this.edgeMult;
         }
-        _ref3 = this.nodes[x][this.height - 1];
+        _ref3 = this.getNode(x, this.height - 1);
         for (_j = 0, _len2 = _ref3.length; _j < _len2; _j++) {
           edge = _ref3[_j];
           edge.capacity *= this.edgeMult;
         }
-        this.nodes[x][0].multiSource = true;
-        this.nodes[x][this.height - 1].multiSource = true;
-        this.source.addEdge(this.nodes[x][0], Infinity);
-        this.source.addEdge(this.nodes[x][this.height - 1], Infinity);
+        this.setMultiSource(this.getNode(x, 0));
+        this.setMultiSource(this.getNode(x, this.height - 1));
       }
-      for (y = 0, _ref4 = this.height; 0 <= _ref4 ? y < _ref4 : y > _ref4; 0 <= _ref4 ? y++ : y--) {
-        _ref5 = this.nodes[0][y];
+      for (y = 1, _ref4 = this.height - 1; 1 <= _ref4 ? y < _ref4 : y > _ref4; 1 <= _ref4 ? y++ : y--) {
+        _ref5 = this.getNode(0, y);
         for (_k = 0, _len3 = _ref5.length; _k < _len3; _k++) {
           edge = _ref5[_k];
           edge.capacity *= this.edgeMult;
         }
-        _ref6 = this.nodes[this.width - 1][y];
+        _ref6 = this.getNode(this.width - 1, y);
         for (_l = 0, _len4 = _ref6.length; _l < _len4; _l++) {
           edge = _ref6[_l];
           edge.capacity *= this.edgeMult;
         }
-        this.nodes[0][y].multiSource = true;
-        this.nodes[this.width - 1][y].multiSource = true;
-        this.source.addEdge(this.nodes[0][y], Infinity);
-        this.source.addEdge(this.nodes[this.width - 1][y], Infinity);
+        this.setMultiSource(this.getNode(0, y));
+        this.setMultiSource(this.getNode(this.width - 1, y));
       }
+      _results = [];
       for (i = 1, _ref7 = this.width - 1; 1 <= _ref7 ? i < _ref7 : i > _ref7; 1 <= _ref7 ? i++ : i--) {
-        _ref8 = this.nodes[i][i];
+        _ref8 = this.getNode(i, i);
         for (_m = 0, _len5 = _ref8.length; _m < _len5; _m++) {
           edge = _ref8[_m];
           edge.capacity *= this.edgeMult;
         }
-        _ref9 = this.nodes[i][this.height - 1 - i];
+        _ref9 = this.getNode(i, this.height - 1 - i);
         for (_n = 0, _len6 = _ref9.length; _n < _len6; _n++) {
           edge = _ref9[_n];
           edge.capacity *= this.edgeMult;
         }
-        this.nodes[i][i].multiSink = true;
-        this.nodes[i][this.height - 1 - i].multiSink = true;
-        this.nodes[i][i].addEdge(this.sink, Infinity);
-        this.nodes[i][this.height - 1 - i].addEdge(this.sink, Infinity);
+        this.setMultiSink(this.getNode(i, i));
+        _results.push(this.setMultiSink(this.getNode(i, this.height - 1 - i)));
       }
-      if (!this.fullGraph) {
-        for (x = 1, _ref10 = this.width - 1; 1 <= _ref10 ? x < _ref10 : x > _ref10; 1 <= _ref10 ? x++ : x--) {
-          edgeMult = this.edgeMult;
-          for (y = 0, _ref11 = this.height / 2; 0 <= _ref11 ? y < _ref11 : y > _ref11; 0 <= _ref11 ? y++ : y--) {
-            src = this.nodes[x][y];
-            if (y > 0) {
-              src.addEdge(this.nodes[x][y - 1], edgeMult * this.colorDifference(x, y, x, y - 1));
-            }
-            src.addEdge(this.nodes[x][y + 1], edgeMult * this.colorDifference(x, y, x, y + 1));
-            src.addEdge(this.nodes[x - 1][y], edgeMult * this.colorDifference(x, y, x - 1, y));
-            src.addEdge(this.nodes[x + 1][y], edgeMult * this.colorDifference(x, y, x + 1, y));
-            edgeMult *= this.edgeMultDecay;
-            if (edgeMult < 1) {
-              edgeMult = 1;
-            }
-            if (this.nodes[x][y + 1].multiSink) {
-              break;
-            }
-          }
-          edgeMult = this.edgeMult;
-          for (y = _ref12 = this.height - 1, _ref13 = this.height / 2; _ref12 <= _ref13 ? y < _ref13 : y > _ref13; _ref12 <= _ref13 ? y++ : y--) {
-            src = this.nodes[x][y];
-            if (y < this.height - 1) {
-              src.addEdge(this.nodes[x][y + 1], edgeMult * this.colorDifference(x, y, x, y + 1));
-            }
-            src.addEdge(this.nodes[x][y - 1], edgeMult * this.colorDifference(x, y, x, y - 1));
-            src.addEdge(this.nodes[x - 1][y], edgeMult * this.colorDifference(x, y, x - 1, y));
-            src.addEdge(this.nodes[x + 1][y], edgeMult * this.colorDifference(x, y, x + 1, y));
-            edgeMult *= this.edgeMultDecay;
-            if (edgeMult < 1) {
-              edgeMult = 1;
-            }
-            if (this.nodes[x][y - 1].multiSink) {
-              break;
-            }
-          }
-        }
-        _results = [];
-        for (y = 1, _ref14 = this.height - 1; 1 <= _ref14 ? y < _ref14 : y > _ref14; 1 <= _ref14 ? y++ : y--) {
-          edgeMult = this.edgeMult;
-          for (x = 0, _ref15 = this.width / 2; 0 <= _ref15 ? x < _ref15 : x > _ref15; 0 <= _ref15 ? x++ : x--) {
-            src = this.nodes[x][y];
-            if (x > 1) {
-              src.addEdge(this.nodes[x - 1][y], edgeMult * this.colorDifference(x, y, x - 1, y));
-            }
-            src.addEdge(this.nodes[x + 1][y], edgeMult * this.colorDifference(x, y, x + 1, y));
-            src.addEdge(this.nodes[x][y - 1], edgeMult * this.colorDifference(x, y, x, y - 1));
-            src.addEdge(this.nodes[x][y + 1], edgeMult * this.colorDifference(x, y, x, y + 1));
-            edgeMult *= this.edgeMultDecay;
-            if (edgeMult < 1) {
-              edgeMult = 1;
-            }
-            if (this.nodes[x + 1][y].multiSink) {
-              break;
-            }
-          }
-          edgeMult = this.edgeMult;
-          _results.push((function() {
-            var _ref16, _ref17, _results2;
-            _results2 = [];
-            for (x = _ref16 = this.width - 1, _ref17 = this.width / 2; _ref16 <= _ref17 ? x < _ref17 : x > _ref17; _ref16 <= _ref17 ? x++ : x--) {
-              src = this.nodes[x][y];
-              src.addEdge(this.nodes[x - 1][y], edgeMult * this.colorDifference(x, y, x - 1, y));
-              if (x < this.width - 1) {
-                src.addEdge(this.nodes[x + 1][y], edgeMult * this.colorDifference(x, y, x + 1, y));
-              }
-              src.addEdge(this.nodes[x][y - 1], edgeMult * this.colorDifference(x, y, x, y - 1));
-              src.addEdge(this.nodes[x][y + 1], edgeMult * this.colorDifference(x, y, x, y + 1));
-              edgeMult *= this.edgeMultDecay;
-              if (edgeMult < 1) {
-                edgeMult = 1;
-              }
-              if (this.nodes[x - 1][y].multiSink) {
-                break;
-              }
-            }
-            return _results2;
-          }).call(this));
-        }
-        return _results;
-      }
+      return _results;
     };
     ImageGraph.prototype.computeGraft = function() {
-      this.computeMaxFlow();
+      this.solve();
       return this.partition();
     };
     ImageGraph.prototype.drawPath = function(context) {

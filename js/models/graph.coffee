@@ -4,227 +4,306 @@
 # Described here: http://www.csd.uwo.ca/~yuri/Papers/pami04.pdf
 
 class Node
-  constructor: (@val) ->
-    @parent = null
-    @parentEdge = null
-    @tree = null
-    @edges = []
-
-  addEdge: (node, capacity) ->
-    edge = new Edge @, node, capacity
-    @edges.push edge
-    node.edges.push edge
-    edge
+  constructor: (@id, val = null) ->
+    @val = val if val?
 
 class Edge
-  constructor: (@src, @dest, @capacity) -> @flow = 0
-  residualCapacity: -> @capacity - @flow
-  saturated: -> @flow == @capacity
+  constructor: (@capacity) ->
 
 class Graph
+  SOURCE: "source"
+  SINK: "sink"
+  ROUNDING_TOLERANCE: 0.001
+
   constructor: ->
-    @nodes = []
-    @source = @addNode(new Node("source"))
-    @sink = @addNode(new Node("sink"))
-    @source.tree = "source"
-    @sink.tree = "sink"
+    @numNodes = 0 # Doesn't include source and sink
+    @nodes = {}
+    @edges = {}
+    @residualEdges = {}
+
+    @source = @addNode @SOURCE, @SOURCE
+    @sink = @addNode @SINK, @SINK
+    @source.tree = @SOURCE
+    @sink.tree = @SINK
     @active = [@source, @sink]
     @orphaned = []
 
-  # TODO: Store nodes and edges in an associative array by node id to remove circular references
-  addNode: (node) ->
-    @nodes.push(node)
+  addNode: (val, id = null) ->
+    if id? && @nodes[id]?
+      throw new Error "Duplicate node" 
+
+    id ?= @numNodes++
+    @nodes[id] = new Node id, val
+    node = @nodes[id]
+    node.tree = null
+    node.parentId = null
     node
 
-  setParent: (node, parent, edge) ->
-    throw new Error("Can't set parent to a node with no tree") if parent.tree == null
+  addEdge: (p, q, capacity) ->
+    if @edges[p.id]?[q.id]
+      debugger
+      throw new Error "Duplicate edge"
 
-    if parent.tree == "source" && (edge.src != parent || edge.dest != node)
-      throw new Error "Invalid edge"
+    edge = new Edge capacity
+    @edges[p.id] ?= {}
+    @edges[p.id][q.id] = edge
+    edge.flow = 0
 
-    if parent.tree == "sink" && (edge.dest != parent || edge.src != node)
-      throw new Error "Invalid edge"
+    if p.id == undefined || q.id == undefined
+      debugger
+      throw new Error "Bad node in call to addEdge"
 
-    node.parent = parent
-    node.parentEdge = edge
-    node.tree = parent.tree
+    @residualEdges[p.id] ?= {}
+    @residualEdges[q.id] ?= {}
+    @residualEdges[p.id][q.id] ?= new Edge 0
+    @residualEdges[q.id][p.id] ?= new Edge 0
 
-  orphan: (node) ->
-    # Removes the parent connection, but does not remove the node from its tree
-    node.parentEdge = null
-    node.parent = null
-    @orphaned.push(node) if @orphaned.indexOf(node) == -1
+    @residualEdges[p.id][q.id].capacity += capacity
 
-  validatePath: (path) ->
-    return if path.length == 0
+    edge
 
-    if path[0].src != @source
-      throw new Error("Path must start at source")
+  setMultiSource: (p) ->
+    p.multiSource = true
+    @addEdge @source, p, Infinity
 
-    if path[path.length - 1].dest != @sink
-      throw new Error("Path must start at sink")
+  setMultiSink: (p) ->
+    p.multiSink = true
+    @addEdge p, @sink, Infinity
 
-    for i in [0...path.length - 1]
-      if path[i].dest != path[i + 1].src
-        throw new Error("Interior path edges must match")
-    
-    for edge in path
-      if edge.flow == Infinity
-        throw new Error "Infinite flow"
-
-  printEdge: (edge) ->
-    s = edge.src.val
-    d = edge.dest.val
-    console.debug "#{if s.x != undefined then "(#{s.x}, #{s.y}) - " else "(#{s}) - "} #{if d.x != undefined then "(#{d.x}, #{d.y}): " else "(#{d}): "} #{edge.flow} / #{edge.capacity}"
-
-  printPath: (path) ->
-    console.debug "-------- Path -------"
-    @printEdge(edge) for edge in path
-
-  sourceFlow: ->
-    sourceFlow = 0
-    sourceFlow += edge.flow for edge in @source.edges
-    sourceFlow
-
-  sinkFlow: ->
-    sinkFlow = 0
-    sinkFlow += edge.flow for edge in @source.edges
-    sinkFlow
-
-  validateFlow: ->
-    if @sourceFlow() != @sinkFlow()
-      throw new Error "Source and sink flows don't match"
-
-  computeMaxFlow: ->
-    while true
+  solve: ->
+    loop
       path = @grow()
-
-      if path.length == 0 then break else @augment(path)
-
-      # @printPath(path)
-      @validateFlow()
-
+      @printPath path
+      if path.length == 0 then break else @augment path
       @adopt()
 
-    @validateFlow()
-    @maxFlow = @sourceFlow()
+  maxFlow: ->
+    flow = 0
+    flow += @edges[@source.id][id].flow for id of @edges[@source.id]
+    flow
 
   partition: ->
-    @sourceNodes = []
-    @sinkNodes = []
+    @sourceNodes = []; @sinkNodes = []
 
-    for node in @nodes
-      if node.tree == "sink"
-        @sourceNodes.push(node)
-      else if node.tree == "sink"
-        @sinkNodes.push(node)
-      else
-        @sourceNodes.push(node)
+    for id of @nodes
+      p = @nodes[id]
+      unless p.tree?
+        console.debug "Unclassified node '#{p.id}'"
+        @sourceNodes.push p
 
-  getPath: (p, q) ->
-    path = []
-    if p.tree == "source"
-      sourceNode = p; sinkNode = q;
-    else
-      sourceNode = q; sinkNode = p;
+      @sourceNodes.push p if p.tree == @SOURCE
+      @sinkNodes.push p if p.tree == @SINK
 
-    # Add the connecting edge between the source and sink tree frontiers
-    for edge in sourceNode.edges
-      if edge.dest == sinkNode
-        path.push edge
-        break
-
-    while sourceNode.parent
-      path.unshift sourceNode.parentEdge
-      sourceNode = sourceNode.parent
-
-    while sinkNode.parent
-      path.push sinkNode.parentEdge
-      sinkNode = sinkNode.parent
-
-    @validatePath path
-
-    path
+    [@sourceNodes, @sinkNodes]
 
   grow: ->
     while @active.length
       p = @active[0]
-      q = null
+      for q in @neighbors p when @treeCapacity(p, q) > 0
+        if q.tree == null
+          @setTree q, p.tree
+          @setParent q, p
+          @addActive q
+        else if q.tree != p.tree != null
+          return @getPath p, q
 
-      for edge in p.edges when edge.residualCapacity() > 0
-        if p.tree == "source" && edge.src == p || p.tree == "sink" && edge.dest == p
-          q = (if edge.src == p then edge.dest else edge.src)
-          if q.tree == null
-            @setParent q, p, edge
-            @addActive q
-          else if q.tree != p.tree
-            return @getPath p, q
+      @removeActive p
 
-      @active.shift()
+    [] # No more active nodes to search, return an empty path to indicate completion
 
-    []
+  getPath: (p, q) ->
+    # Get path from source to sink, assuming p and q are frontier nodes
+    # in the source and sink trees that are connected by an edge
+
+    if p.tree == null || q.tree == null || p.tree == q.tree
+      throw new Error "Invalid nodes in call to getPath - p and q must be from different trees"
+
+    path = []
+
+    if p.tree == @SOURCE then sourceNode = p else sourceNode = q
+    loop
+      path.unshift sourceNode
+      if sourceNode.parentId? then sourceNode = @nodes[sourceNode.parentId] else break
+
+    if p.tree == @SINK then sinkNode = p else sinkNode = q
+    loop
+      path.push sinkNode
+      if sinkNode.parentId? then sinkNode = @nodes[sinkNode.parentId] else break
+
+    path
 
   augment: (path) ->
+    @addFlowToPath path, @bottleneckCapacity(path)
+
+  clamp: (val, clamp) ->
+    # If val is within rounding tolerance of clamp, return clamp, otherwise return val
+    if val > clamp - @ROUNDING_TOLERANCE && val < clamp + @ROUNDING_TOLERANCE
+      return clamp
+    else
+      return val
+
+  addResidualCapacity: (p, q, capacity) ->
+    @residualEdges[p.id][q.id].capacity += capacity
+
+  removeResidualCapacity: (p, q, capacity) ->
+    # To prevent rounding error, we clamp to zero
+    @residualEdges[p.id][q.id].capacity = @clamp(@residualCapacity(p, q) - capacity, 0)
+    throw new Error "Negative residual capacity" if @residualCapacity(p, q) < 0
+
+  addFlow: (p, q, flow) ->
+    # Update residual capacities
+    @removeResidualCapacity p, q, flow
+    @addResidualCapacity q, p, flow
+
+    if @residualCapacity(p, q) == 0
+      # Edge is saturated, orphan the leaf node
+      @addOrphan q if p.tree == q.tree == @SOURCE
+      @addOrphan p if p.tree == q.tree == @SINK
+
+    # Push flow through the given edge if it is present
+    edge = @edges[p.id]?[q.id]
+    edgeCapacity = 0
+    if edge?
+      edgeCapacity = edge.capacity - edge.flow
+      if edgeCapacity < flow
+        edge.flow += edgeCapacity
+        flow -= edgeCapacity
+      else
+        edge.flow += flow
+        flow = 0
+
+    # If there is still flow left, push it through the reverse edge
+    if flow > 0
+      edge = @edges[q.id]?[p.id]
+      if edge?
+        edge.flow -= flow
+        edge.flow = @clamp edge.flow, 0
+
+  addFlowToPath: (path, flow) ->
+    @addFlow path[i], path[i + 1], flow for i in [0...path.length - 1]
+
+  residualCapacity: (p, q) ->
+    @residualEdges[p.id][q.id].capacity
+
+  bottleneckCapacity: (path) ->
+    # Returns the bottleneck residual capacity along the augmenting path
+
     minCapacity = Infinity
-    for edge in path when edge.residualCapacity() < minCapacity
-      minCapacity = edge.residualCapacity()
+    for i in [0...path.length - 1]
+      p = path[i]; q = path[i + 1]
+      capacity = @residualCapacity p, q
+      minCapacity = capacity if capacity < minCapacity
 
-    # if minCapacity == Infinity
-    #   throw new Error "Infinite flow path"
+    throw new Error "Infinite capacity path" if minCapacity == Infinity
 
-    for edge in path
-      edge.flow += minCapacity
-      if edge.saturated
-        if edge.src.tree == edge.dest.tree
-          if edge.src.tree == "source"
-            @orphan edge.dest
-          else if edge.src.tree == "sink"
-            @orphan edge.src
+    if minCapacity <= 0
+      debugger
+      throw new Error "No residual capacity in this path"
+
+    minCapacity
 
   adopt: ->
     while @orphaned.length
       @process @orphaned.pop()
 
-  attemptParent: (p, edge) ->
-    return false if p.tree == "source" && edge.src == p || p.tree == "sink" && edge.dest == p
+  process: (p) ->
+    return if @findParent p
 
-    q = (if p == edge.src then edge.dest else edge.src)
+    for q in @neighbors p when q.tree == p.tree
+      @addActive q if @treeCapacity(q, p) > 0
+      @addOrphan q if q.parentId == p.id
 
-    # throw new Error("attemptParent() with invalid edge") if p.tree == null || p.tree == "source" && edge.src != p || p.tree == "sink" && edge.dest != p
+    @setTree p, null
+    @removeActive p
 
-    # Returns true and sets parent if q is a valid parent of p
-    # This means q is in the same tree as p, and q is rooted at the source or sink
+    # p is now free, all neighbors connected by non-saturated edges should be active
 
-    if p.tree == q.tree && edge.residualCapacity() > 0
-      # verify that q is rooted at a terminal node, not detached
-      n = q
-      while n.parent
-        if n.parent == @source || n.parent == @sink
-          @setParent p, q, edge # Valid parent found, set it and return true
-          return true
+  setTree: (p, tree) -> p.tree = tree
 
-        n = n.parent
+  setParent: (child, parent) ->
+    throw new Error "Invalid parent" unless parent.tree?
+    if parent? then child.parentId = parent.id else child.parentId = null
 
-    false
+  neighbors: (p) ->
+    # Returns all nodes that are connected to this node with an edge, either as a source, or destination
+    nodes = []
+    for id of @residualEdges[p.id]
+      if @nodes[id] == undefined
+        debugger
+        throw "Undefined edge"
+      else
+        nodes.push(@nodes[id])
+
+    nodes
+
+  treeCapacity: (p, q) ->
+    if !p || !q
+      debugger
+      throw new Error "Invalid node in call to treeCapacity"
+
+    # Returns the residual capacity as appropriate for the tree the node is in
+    if p.tree == @SOURCE
+      @residualEdges[p.id][q.id].capacity
+    else if p.tree == @SINK
+      @residualEdges[q.id][p.id].capacity
+    else
+      throw new Error "treeCapacity called on node with no tree"
+
+  addOrphan: (p) ->
+    # Removes the parent connection, but does not remove the node from its tree
+    throw new Error "Node is already in the orphaned list" if @orphaned.indexOf(p) != -1
+    p.parentId = null
+    @orphaned.push p
 
   addActive: (p) ->
     @active.push p if @active.indexOf(p) == -1
 
-  process: (p) ->
-    for edge in p.edges
-      if p.tree == "source" && edge.dest == p || p.tree == "sink" && edge.src == p
-        
-        return if @attemptParent p, edge # Return if we found a valid parent
+  removeActive: (p) ->
+    i = @active.indexOf p
+    console.debug("Attempted to remove active node that was not active") if i == -1
+    @active.splice i, 1
 
-    for edge in p.edges
-      q = if p == edge.src then edge.dest else edge.src
+  findParent: (p) ->
+    for q in @neighbors p
+      if q.tree == p.tree && @treeCapacity(q, p) > 0 && @isRooted q
+        @setParent p, q
+        return true
 
-      if p.tree == q.tree
-        @addActive(q) if edge.residualCapacity() > 0
-        @orphan(q) if q.parent == p
+    false
 
-    p.tree = null
-    @active.splice(@active.indexOf(p), 1)
+  isRooted: (p) ->
+    while p.parent?
+      return true if q.parentId == @SOURCE || q.parentId == @SINK
+
+    false
+
+  validatePath: (path) ->
+    return true if path.length == 0
+
+    throw new Error "Path must start at source" if path[0] != @source
+    throw new Error "Path must end at sink" if path[path.length - 1] != @sink
+
+    for i in [0...path.length - 1]
+      edge = @edges[path[i].id][path[i + 1].id]
+      throw new Error "Path has a gap" unless edge?
+      throw new Error "Infinite flow" if edge.flow == Infinity
+
+  validateFlow: ->
+    if @sourceFlow() != @sinkFlow()
+      throw new Error "Source and sink flows don't match"
+
+  printPath: (path) ->
+    pathVals = []
+    for p in path
+      if p == @source
+        pathVals.push "SOURCE"
+      else if p == @sink
+        pathVals.push "SINK"
+      else
+        pathVals.push "(#{p.val.x},#{p.val.y})"
+
+    console.debug pathVals.join(" - ")
+
 
 # Flow network representation of an image difference where each node is a pixel.
 # Each edge represents the pixel color difference between images.
@@ -232,6 +311,8 @@ class Graph
 # minimizing the appearance of seams.
 class ImageGraph extends Graph
   constructor: (imageData1, imageData2) ->
+    super()
+
     if imageData1.width != imageData2.width || imageData1.height != imageData2.height
       throw "Image dimensions don't match"
 
@@ -241,58 +322,36 @@ class ImageGraph extends Graph
     @width = @imageData1.width
     @height = @imageData1.height
 
-    @source = new Node "source"
-    @sink = new Node "sink"
-    @source.tree = "source"
-    @sink.tree = "sink"
-    @active = [@source, @sink]
-    @orphaned = []
-    @fullGraph = false
+    @edgeMult = 1
+    @edgeMultDecay = 1
+    @fullGraph = true
 
     # Initialize nodes
-    @nodes = new Array @imageData1.width
-    for x in [0...@width]
-      @nodes[x] = new new Array @imageData1.height
-      for y in [0...@height]
-        node = @nodes[x][y] = new Node { x: x, y: y }
+    for y in [0...@height]
+      for x in [0...@width]
+        node = @addNode { x: x, y: y }
 
         if @fullGraph
           if x > 0 # Left
-            leftNode = @nodes[x - 1][y]
+            leftNode = @getNode x - 1, y
             leftColorDiff = @colorDifference x - 1, y, x, y
-            node.addEdge leftNode, leftColorDiff
-            leftNode.addEdge node, leftColorDiff
-        
+            @addEdge leftNode, node, leftColorDiff
+            @addEdge node, leftNode, leftColorDiff
+
           if y > 0 # Top
-            topNode = @nodes[x][y - 1]
+            topNode = @getNode x, y - 1
             topColorDiff = @colorDifference x, y - 1, x, y
-            node.addEdge topNode, topColorDiff
-            topNode.addEdge node, topColorDiff
+            @addEdge node, topNode, topColorDiff
+            @addEdge topNode, node, topColorDiff
 
-  partition: ->
-    @sourceNodes = []
-    @sinkNodes = []
-
-    for x in [0...@width]
-      for y in [0...@height]
-        node = @nodes[x][y]
-        if node.tree == "source"
-          @sourceNodes.push(node)
-        else if node.tree == "sink"
-          @sinkNodes.push(node)
-        else
-          @sinkNodes.push(node)
-          # console.debug "ERROR: (" + x + ", " + y + ") not in source or sink"
-          # throw new Error "All nodes should be in the source or sink"
+  getNode: (x, y) ->
+    @nodes[y * @height + x]
 
   colorDifference: (sx, sy, tx, ty) ->
     s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
     t1 = @imageData1.labColor(tx, ty); t2 = @imageData2.labColor(tx, ty)
 
     @imageData1.colorDifference(s1, s2) + @imageData1.colorDifference(t1, t2)
-
-  getNode: (x, y) ->
-    @nodes[x][y]
 
   initWangTile: ->
     # Adds source and sink nodes as appropriate for solving the min-cut for a strict Wang-tile
@@ -301,103 +360,94 @@ class ImageGraph extends Graph
     if @width != @height || @width % 2 != 0
       throw "Wang tiles must be square with even width and height"
 
-    @edgeMult = 4
-    @edgeMultDecay = 0.6
-
     # Add border source nodes
     for x in [0...@width]
-      edge.capacity *= @edgeMult for edge in @nodes[x][0]
-      edge.capacity *= @edgeMult for edge in @nodes[x][@height - 1]
+      edge.capacity *= @edgeMult for edge in @getNode x, 0
+      edge.capacity *= @edgeMult for edge in @getNode x, @height - 1
 
-      @nodes[x][0].multiSource = true
-      @nodes[x][@height - 1].multiSource = true
-      @source.addEdge @nodes[x][0], Infinity # Top
-      @source.addEdge @nodes[x][@height - 1], Infinity # Bottom
+      @setMultiSource @getNode(x, 0)
+      @setMultiSource @getNode(x, @height - 1)
 
-    for y in [0...@height]
-      edge.capacity *= @edgeMult for edge in @nodes[0][y]
-      edge.capacity *= @edgeMult for edge in @nodes[@width - 1][y]
+    for y in [1...@height - 1]
+      edge.capacity *= @edgeMult for edge in @getNode 0, y
+      edge.capacity *= @edgeMult for edge in @getNode @width - 1, y
 
-      @nodes[0][y].multiSource = true
-      @nodes[@width - 1][y].multiSource = true
-      @source.addEdge @nodes[0][y], Infinity # Left
-      @source.addEdge @nodes[@width - 1][y], Infinity # Right
+      @setMultiSource @getNode(0, y)
+      @setMultiSource @getNode(@width - 1, y)
 
     # Add interior sink nodes (X-shape that divides the image into four triangles, not including 1 pixel border)
     for i in [1...@width - 1]
-      edge.capacity *= @edgeMult for edge in @nodes[i][i]
-      edge.capacity *= @edgeMult for edge in @nodes[i][@height - 1 - i]
+      edge.capacity *= @edgeMult for edge in @getNode i, i
+      edge.capacity *= @edgeMult for edge in @getNode i, @height - 1 - i
 
-      @nodes[i][i].multiSink = true
-      @nodes[i][@height - 1 - i].multiSink = true
-      @nodes[i][i].addEdge @sink, Infinity
-      @nodes[i][@height - 1 - i].addEdge @sink, Infinity
+      @setMultiSink @getNode(i, i)
+      @setMultiSink @getNode(i, @height - 1 - i)
 
-    if !@fullGraph
-      for x in [1...@width - 1]
-        edgeMult = @edgeMult
-        # Top
-        for y in [0...@height / 2]
-          src = @nodes[x][y]
-          src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1 if y > 0
-          src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
-          src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
-          src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
-          
-          edgeMult *= @edgeMultDecay
-          edgeMult = 1 if edgeMult < 1
-          
-          break if @nodes[x][y + 1].multiSink
-
-        edgeMult = @edgeMult
-
-        # Bottom
-        for y in [@height - 1...@height / 2]
-          src = @nodes[x][y]
-          src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1 if y < @height - 1
-          src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
-          src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
-          src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
-          
-          edgeMult *= @edgeMultDecay
-          edgeMult = 1 if edgeMult < 1
-          
-          break if @nodes[x][y - 1].multiSink
-
-      for y in [1...@height - 1]
-        
-        edgeMult = @edgeMult
-        
-        # Left
-        for x in [0...@width / 2]
-          src = @nodes[x][y]
-          src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y if x > 1
-          src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
-          src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
-          src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
-          
-          edgeMult *= @edgeMultDecay
-          edgeMult = 1 if edgeMult < 1
-          
-          break if @nodes[x + 1][y].multiSink
-
-        edgeMult = @edgeMult
-
-        # Right
-        for x in [@width - 1...@width / 2]
-          src = @nodes[x][y]
-          src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
-          src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y if x < @width - 1
-          src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
-          src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
-          
-          edgeMult *= @edgeMultDecay
-          edgeMult = 1 if edgeMult < 1
-          
-          break if @nodes[x - 1][y].multiSink
+    # if !@fullGraph
+    #   for x in [1...@width - 1]
+    #     edgeMult = @edgeMult
+    #     # Top
+    #     for y in [0...@height / 2]
+    #       src = @nodes[x][y]
+    #       src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1 if y > 0
+    #       src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
+    #       src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
+    #       src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
+    #       
+    #       edgeMult *= @edgeMultDecay
+    #       edgeMult = 1 if edgeMult < 1
+    #       
+    #       break if @nodes[x][y + 1].multiSink
+    # 
+    #     edgeMult = @edgeMult
+    # 
+    #     # Bottom
+    #     for y in [@height - 1...@height / 2]
+    #       src = @nodes[x][y]
+    #       src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1 if y < @height - 1
+    #       src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
+    #       src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
+    #       src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
+    #       
+    #       edgeMult *= @edgeMultDecay
+    #       edgeMult = 1 if edgeMult < 1
+    #       
+    #       break if @nodes[x][y - 1].multiSink
+    # 
+    #   for y in [1...@height - 1]
+    #     
+    #     edgeMult = @edgeMult
+    #     
+    #     # Left
+    #     for x in [0...@width / 2]
+    #       src = @nodes[x][y]
+    #       src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y if x > 1
+    #       src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
+    #       src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
+    #       src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
+    #       
+    #       edgeMult *= @edgeMultDecay
+    #       edgeMult = 1 if edgeMult < 1
+    #       
+    #       break if @nodes[x + 1][y].multiSink
+    # 
+    #     edgeMult = @edgeMult
+    # 
+    #     # Right
+    #     for x in [@width - 1...@width / 2]
+    #       src = @nodes[x][y]
+    #       src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
+    #       src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y if x < @width - 1
+    #       src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
+    #       src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
+    #       
+    #       edgeMult *= @edgeMultDecay
+    #       edgeMult = 1 if edgeMult < 1
+    #       
+    #       break if @nodes[x - 1][y].multiSink
 
   computeGraft: ->
-    @computeMaxFlow()
+    @solve()
     @partition()
 
   drawPath: (context) ->
