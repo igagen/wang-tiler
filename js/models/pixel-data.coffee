@@ -1,24 +1,4 @@
-class PixelData
-  constructor: (rawImageData) ->
-    @width = rawImageData.width
-    @height = rawImageData.height
-    @rawImageData = rawImageData
-
-  color: (x, y) ->
-    i = (y * @width + x) * 4
-    [@rawImageData.data[i], @rawImageData.data[i + 1], @rawImageData.data[i + 2], @rawImageData.data[i + 3]]
-
-  setColor: (x, y, c) ->
-    i = (y * @width + x) * 4
-
-    @rawImageData.data[i] = c[0];
-    @rawImageData.data[i + 1] = c[1];
-    @rawImageData.data[i + 2] = c[2]; 
-    @rawImageData.data[i + 3] = c[3];
-
-  labColor: (x, y) ->
-    @xyzToLab(@rgbToXyz(@color(x, y)))
-
+ImageUtil =
   rgbToXyz: (rgb) ->
     r = rgb[0] / 255; g = rgb[1] / 255; b = rgb[2] / 255
 
@@ -42,19 +22,98 @@ class PixelData
 
     [(116 * y) - 16, 500 * (x - y), 200 * (y - z)]
 
+  magnitude: (c) ->
+    Math.sqrt(c[0] * c[0] + c[1] * c[1] + c[2] * c[2])
+
+  subtract: (c1, c2) ->
+    [c1[0] - c2[0], c1[1] - c2[1], c1[2] - c2[2]]
+
+  colorDifference: (c1, c2) ->
+    # e76 algorithm is simply the Euclidean distance between the two colors in the Lab color space
+    ImageUtil.magnitude(ImageUtil.subtract(c1, c2))
+
+
+class PixelData
+  constructor: (rawImageData) ->
+    @width = rawImageData.width
+    @height = rawImageData.height
+    @rawImageData = rawImageData
+    @labColorData = null
+
+  initLabColor: () ->
+    @labColorData = new Array @width
+    @labColorData[x] = new Array @height for x in [0...@width]
+    for x in [0...@width]
+      for y in [0...@height]
+        @labColorData[x][y] = null
+
+  color: (x, y) ->
+    i = (y * @width + x) * 4
+    [@rawImageData.data[i], @rawImageData.data[i + 1], @rawImageData.data[i + 2], @rawImageData.data[i + 3]]
+
+  setColor: (x, y, c) ->
+    i = (y * @width + x) * 4
+
+    @rawImageData.data[i] = c[0];
+    @rawImageData.data[i + 1] = c[1];
+    @rawImageData.data[i + 2] = c[2]; 
+    @rawImageData.data[i + 3] = c[3];
+
+  labColor: (x, y) ->
+    @initLabColor() unless @labColorData?
+    return @labColorData[x][y] if @labColorData[x][y]
+    @labColorData[x][y] = ImageUtil.xyzToLab(ImageUtil.rgbToXyz(@color(x, y)))
+
+  gradient: (x, y, dx, dy) ->
+    if dx == -1 && dy == 0
+      kernel = [[1, 0, -1],
+                [2, 0, -2],
+                [1, 0, -1]]
+    else if dx == 1 && dy == 0
+      kernel = [[-1, 0, 1],
+                [-2, 0, 2],
+                [-1, 0, 1]]
+    else if dx == 0 && dy == -1
+      kernel = [[1, 2, 1],
+                [0, 0, 0],
+                [-1, -2, -1]]
+    else if dx == 0 && dy == 1
+      kernel = [[-1, -2, -1],
+                [0, 0, 0],
+                [1, 2, 1]]
+    else
+      throw new Error "Invalid dx/dy for call to gradient"
+
+    @convolve x, y, kernel
+
+  convolve: (x, y, kernel) ->
+    convolution = [0, 0, 0]
+    size = kernel.length
+    offset = Math.floor(size / 2)
+
+    for kx in [0...size]
+      for ky in [0...size]
+        clampedX = Math.min(Math.max(x + kx - offset, 0), @width - 1)
+        clampedY = Math.min(Math.max(y + ky - offset, 0), @height - 1)
+
+        color = @labColor clampedX, clampedY
+
+        k = kernel[kx][ky]
+        convolution[0] += color[0] * k
+        convolution[1] += color[1] * k
+        convolution[2] += color[2] * k
+
+    convolution
+
   imageDiff: (imageData) ->
     return Infinity if @width != imageData.width || @height != imageData.height
 
     diff = 0
     for x in [0...@width]
       for y in [0...@height]
-        diff += @colorDifference(@labColor(x, y), imageData.labColor(x, y))
+        diff += ImageUtil.colorDifference(@labColor(x, y), imageData.labColor(x, y))
 
     diff / (@width * @height)
 
-  colorDifference: (c1, c2) ->
-    # e76 algorithm is simply the Euclidean distance between the two colors in the Lab color space
-    dL = c2[0] - c1[0]; da = c2[1] - c1[1]; db = c2[2] - c1[2]
-    Math.sqrt dL * dL + da * da + db * db
-
+window.ImageUtil = ImageUtil
 window.PixelData = PixelData

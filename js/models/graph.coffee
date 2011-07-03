@@ -14,6 +14,10 @@ class Graph
   SOURCE: "source"
   SINK: "sink"
   ROUNDING_TOLERANCE: 0.001
+  TERMINAL_WEIGHT_MULT: 5
+  TERMINAL_MULT_DECAY: 0.8
+  WEIGHT_TERMINAL_EDGES: true
+  SIMPLE_WEIGHT_CALC: false
 
   constructor: ->
     @numNodes = 0 # Doesn't include source and sink
@@ -40,9 +44,7 @@ class Graph
     node
 
   addEdge: (p, q, capacity) ->
-    if @edges[p.id]?[q.id]
-      debugger
-      throw new Error "Duplicate edge"
+    throw new Error "Duplicate edge" if @edges[p.id]?[q.id]
 
     edge = new Edge capacity
     @edges[p.id] ?= {}
@@ -50,7 +52,6 @@ class Graph
     edge.flow = 0
 
     if p.id == undefined || q.id == undefined
-      debugger
       throw new Error "Bad node in call to addEdge"
 
     @residualEdges[p.id] ?= {}
@@ -62,18 +63,24 @@ class Graph
 
     edge
 
+  setCapacity: (p, q, capacity) ->
+    @edges[p.id][q.id].capacity = capacity
+    @residualEdges[p.id][q.id].capacity = capacity
+
   setMultiSource: (p) ->
     p.multiSource = true
+    p.terminalDistance = 0
     @addEdge @source, p, Infinity
 
   setMultiSink: (p) ->
     p.multiSink = true
+    p.terminalDistance = 0
     @addEdge p, @sink, Infinity
 
   solve: ->
     loop
       path = @grow()
-      @printPath path
+      # @printPath path
       if path.length == 0 then break else @augment path
       @adopt()
 
@@ -82,14 +89,20 @@ class Graph
     flow += @edges[@source.id][id].flow for id of @edges[@source.id]
     flow
 
+  findTree: (p) ->
+    return p.tree if p.tree?
+    for q in @neighbors p
+      return q.tree if q.tree?
+      return @findTree q
+
   partition: ->
     @sourceNodes = []; @sinkNodes = []
 
     for id of @nodes
       p = @nodes[id]
       unless p.tree?
-        console.debug "Unclassified node '#{p.id}'"
-        @sourceNodes.push p
+        p.tree = @findTree p
+        # console.debug "Unclassified node '#{p.id}'"
 
       @sourceNodes.push p if p.tree == @SOURCE
       @sinkNodes.push p if p.tree == @SINK
@@ -195,10 +208,7 @@ class Graph
       minCapacity = capacity if capacity < minCapacity
 
     throw new Error "Infinite capacity path" if minCapacity == Infinity
-
-    if minCapacity <= 0
-      debugger
-      throw new Error "No residual capacity in this path"
+    throw new Error "No residual capacity in this path" if minCapacity <= 0
 
     minCapacity
 
@@ -228,18 +238,17 @@ class Graph
     # Returns all nodes that are connected to this node with an edge, either as a source, or destination
     nodes = []
     for id of @residualEdges[p.id]
-      if @nodes[id] == undefined
-        debugger
-        throw "Undefined edge"
-      else
-        nodes.push(@nodes[id])
+      throw "Undefined edge" if @nodes[id] == undefined
+      nodes.push(@nodes[id])
 
     nodes
 
+  outgoingNeighbors: (p) ->
+    # Returns all nodes that are connected to this node as a destination
+    (@nodes[id] for id of @edges[p.id])
+
   treeCapacity: (p, q) ->
-    if !p || !q
-      debugger
-      throw new Error "Invalid node in call to treeCapacity"
+    throw new Error "Invalid node in call to treeCapacity" if !p || !q
 
     # Returns the residual capacity as appropriate for the tree the node is in
     if p.tree == @SOURCE
@@ -260,7 +269,7 @@ class Graph
 
   removeActive: (p) ->
     i = @active.indexOf p
-    console.debug("Attempted to remove active node that was not active") if i == -1
+    # console.debug("Attempted to remove active node that was not active") if i == -1
     @active.splice i, 1
 
   findParent: (p) ->
@@ -322,8 +331,8 @@ class ImageGraph extends Graph
     @width = @imageData1.width
     @height = @imageData1.height
 
-    @edgeMult = 1
-    @edgeMultDecay = 1
+    @edgeMult = 4
+    @edgeMultDecay = 0.8
     @fullGraph = true
 
     # Initialize nodes
@@ -331,27 +340,47 @@ class ImageGraph extends Graph
       for x in [0...@width]
         node = @addNode { x: x, y: y }
 
-        if @fullGraph
-          if x > 0 # Left
-            leftNode = @getNode x - 1, y
-            leftColorDiff = @colorDifference x - 1, y, x, y
-            @addEdge leftNode, node, leftColorDiff
-            @addEdge node, leftNode, leftColorDiff
+        if x > 0 # Left
+          leftNode = @getNode x - 1, y
+          weight = @weight(x - 1, y, x, y)
 
-          if y > 0 # Top
-            topNode = @getNode x, y - 1
-            topColorDiff = @colorDifference x, y - 1, x, y
-            @addEdge node, topNode, topColorDiff
-            @addEdge topNode, node, topColorDiff
+          @addEdge leftNode, node, weight
+          @addEdge node, leftNode, weight
+
+        if y > 0 # Top
+          topNode = @getNode x, y - 1
+          weight = @weight(x, y - 1, x, y)
+          @addEdge node, topNode, weight
+          @addEdge topNode, node, weight
 
   getNode: (x, y) ->
     @nodes[y * @height + x]
+
+  getEdge: (px, py, qx, qy) ->
+    @edges[py * @width + px][qy * @width + qx]
+
+  weight: (sx, sy, tx, ty) ->
+    s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
+    t1 = @imageData1.labColor(tx, ty); t2 = @imageData2.labColor(tx, ty)
+
+    diff = ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2)
+    return diff if @SIMPLE_WEIGHT_CALC
+
+    dx = tx - sx
+    dy = ty - sy
+
+    gs1 = ImageUtil.magnitude @imageData1.gradient(sx, sy, dx, dy)
+    gs2 = ImageUtil.magnitude @imageData2.gradient(sx, sy, dx, dy)
+    gt1 = ImageUtil.magnitude @imageData1.gradient(tx, ty, dx, dy)
+    gt2 = ImageUtil.magnitude @imageData2.gradient(tx, ty, dx, dy)
+
+    diff / (gs1 + gs2 + gt1 + gt2)
 
   colorDifference: (sx, sy, tx, ty) ->
     s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
     t1 = @imageData1.labColor(tx, ty); t2 = @imageData2.labColor(tx, ty)
 
-    @imageData1.colorDifference(s1, s2) + @imageData1.colorDifference(t1, t2)
+    ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2)
 
   initWangTile: ->
     # Adds source and sink nodes as appropriate for solving the min-cut for a strict Wang-tile
@@ -362,89 +391,64 @@ class ImageGraph extends Graph
 
     # Add border source nodes
     for x in [0...@width]
-      edge.capacity *= @edgeMult for edge in @getNode x, 0
-      edge.capacity *= @edgeMult for edge in @getNode x, @height - 1
-
       @setMultiSource @getNode(x, 0)
       @setMultiSource @getNode(x, @height - 1)
 
     for y in [1...@height - 1]
-      edge.capacity *= @edgeMult for edge in @getNode 0, y
-      edge.capacity *= @edgeMult for edge in @getNode @width - 1, y
-
       @setMultiSource @getNode(0, y)
       @setMultiSource @getNode(@width - 1, y)
 
     # Add interior sink nodes (X-shape that divides the image into four triangles, not including 1 pixel border)
     for i in [1...@width - 1]
-      edge.capacity *= @edgeMult for edge in @getNode i, i
-      edge.capacity *= @edgeMult for edge in @getNode i, @height - 1 - i
-
       @setMultiSink @getNode(i, i)
       @setMultiSink @getNode(i, @height - 1 - i)
 
-    # if !@fullGraph
-    #   for x in [1...@width - 1]
-    #     edgeMult = @edgeMult
-    #     # Top
-    #     for y in [0...@height / 2]
-    #       src = @nodes[x][y]
-    #       src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1 if y > 0
-    #       src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
-    #       src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
-    #       src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
-    #       
-    #       edgeMult *= @edgeMultDecay
-    #       edgeMult = 1 if edgeMult < 1
-    #       
-    #       break if @nodes[x][y + 1].multiSink
-    # 
-    #     edgeMult = @edgeMult
-    # 
-    #     # Bottom
-    #     for y in [@height - 1...@height / 2]
-    #       src = @nodes[x][y]
-    #       src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1 if y < @height - 1
-    #       src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
-    #       src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
-    #       src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
-    #       
-    #       edgeMult *= @edgeMultDecay
-    #       edgeMult = 1 if edgeMult < 1
-    #       
-    #       break if @nodes[x][y - 1].multiSink
-    # 
-    #   for y in [1...@height - 1]
-    #     
-    #     edgeMult = @edgeMult
-    #     
-    #     # Left
-    #     for x in [0...@width / 2]
-    #       src = @nodes[x][y]
-    #       src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y if x > 1
-    #       src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y
-    #       src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
-    #       src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
-    #       
-    #       edgeMult *= @edgeMultDecay
-    #       edgeMult = 1 if edgeMult < 1
-    #       
-    #       break if @nodes[x + 1][y].multiSink
-    # 
-    #     edgeMult = @edgeMult
-    # 
-    #     # Right
-    #     for x in [@width - 1...@width / 2]
-    #       src = @nodes[x][y]
-    #       src.addEdge @nodes[x - 1][y], edgeMult * @colorDifference x, y, x - 1, y
-    #       src.addEdge @nodes[x + 1][y], edgeMult * @colorDifference x, y, x + 1, y if x < @width - 1
-    #       src.addEdge @nodes[x][y - 1], edgeMult * @colorDifference x, y, x, y - 1
-    #       src.addEdge @nodes[x][y + 1], edgeMult * @colorDifference x, y, x, y + 1
-    #       
-    #       edgeMult *= @edgeMultDecay
-    #       edgeMult = 1 if edgeMult < 1
-    #       
-    #       break if @nodes[x - 1][y].multiSink
+    # @weightTerminalEdges() if @WEIGHT_TERMINAL_EDGES
+
+  weightTerminalEdges: ->
+    # Cutting paths too close to the sink give diamond artifacts
+    # Cutting paths too close to the source give square artifacts
+    # We weight edges that lead to nearby source or sink nodes higher to lessen these artifactss
+
+    for x in [0...@width]
+      for y in [0...@height]
+        p = @getNode x, y
+        for q in @outgoingNeighbors p
+          unless @isTerminal q
+            mult = @getWeightMult x, y
+            capacity = @edges[p.id][q.id].capacity * mult
+            @setCapacity p, q, capacity
+            # console.debug "(#{p.val.x},#{p.val.y})-(#{q.val.x},#{q.val.y}): #{@getWeightMult x, y}"
+
+  terminalDistance: (x, y) ->
+    # Returns the distance to the nearest source or sink
+
+    return 0 if x == 0 || y == 0 # Source node
+
+    sourceDist = Math.min(x, @width - x - 1, y, @height - y - 1)
+
+    if x < y
+      sinkDist = y - x
+    else if x == y
+      return 0 # Sink node
+    else # x > y
+      sinkDist = x - y
+
+    if x < @height - 1 - y
+      sinkDist = Math.min(sinkDist, @height - 1 - y - x)
+    else if x == @height - 1 - y
+      return 0 # Sink node
+    else
+      sinkDist = Math.min(sinkDist, x - @height + 1 + y)
+
+    Math.min sourceDist, sinkDist
+
+  isTerminal: (p) ->
+    p == @source || p == @sink
+
+  getWeightMult: (x, y) ->
+    weightMult = @TERMINAL_WEIGHT_MULT * Math.pow(@TERMINAL_WEIGHT_DECAY, @terminalDistance(x, y))
+    if weightMult < 1 then 1 else weightMult
 
   computeGraft: ->
     @solve()

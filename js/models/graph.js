@@ -30,6 +30,10 @@
     Graph.prototype.SOURCE = "source";
     Graph.prototype.SINK = "sink";
     Graph.prototype.ROUNDING_TOLERANCE = 0.001;
+    Graph.prototype.TERMINAL_WEIGHT_MULT = 5;
+    Graph.prototype.TERMINAL_MULT_DECAY = 0.8;
+    Graph.prototype.WEIGHT_TERMINAL_EDGES = true;
+    Graph.prototype.SIMPLE_WEIGHT_CALC = false;
     function Graph() {
       this.numNodes = 0;
       this.nodes = {};
@@ -64,7 +68,6 @@
     Graph.prototype.addEdge = function(p, q, capacity) {
       var edge, _base, _base2, _base3, _base4, _base5, _name, _name2, _name3, _name4, _name5, _ref, _ref2, _ref3, _ref4, _ref5, _ref6;
       if ((_ref = this.edges[p.id]) != null ? _ref[q.id] : void 0) {
-        debugger;
         throw new Error("Duplicate edge");
       }
       edge = new Edge(capacity);
@@ -76,7 +79,6 @@
       this.edges[p.id][q.id] = edge;
       edge.flow = 0;
       if (p.id === void 0 || q.id === void 0) {
-        debugger;
         throw new Error("Bad node in call to addEdge");
       }
             if ((_ref3 = (_base2 = this.residualEdges)[_name2 = p.id]) != null) {
@@ -102,12 +104,18 @@
       this.residualEdges[p.id][q.id].capacity += capacity;
       return edge;
     };
+    Graph.prototype.setCapacity = function(p, q, capacity) {
+      this.edges[p.id][q.id].capacity = capacity;
+      return this.residualEdges[p.id][q.id].capacity = capacity;
+    };
     Graph.prototype.setMultiSource = function(p) {
       p.multiSource = true;
+      p.terminalDistance = 0;
       return this.addEdge(this.source, p, Infinity);
     };
     Graph.prototype.setMultiSink = function(p) {
       p.multiSink = true;
+      p.terminalDistance = 0;
       return this.addEdge(p, this.sink, Infinity);
     };
     Graph.prototype.solve = function() {
@@ -115,7 +123,6 @@
       _results = [];
       while (true) {
         path = this.grow();
-        this.printPath(path);
         if (path.length === 0) {
           break;
         } else {
@@ -133,6 +140,20 @@
       }
       return flow;
     };
+    Graph.prototype.findTree = function(p) {
+      var q, _i, _len, _ref;
+      if (p.tree != null) {
+        return p.tree;
+      }
+      _ref = this.neighbors(p);
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        q = _ref[_i];
+        if (q.tree != null) {
+          return q.tree;
+        }
+        return this.findTree(q);
+      }
+    };
     Graph.prototype.partition = function() {
       var id, p;
       this.sourceNodes = [];
@@ -140,8 +161,7 @@
       for (id in this.nodes) {
         p = this.nodes[id];
         if (p.tree == null) {
-          console.debug("Unclassified node '" + p.id + "'");
-          this.sourceNodes.push(p);
+          p.tree = this.findTree(p);
         }
         if (p.tree === this.SOURCE) {
           this.sourceNodes.push(p);
@@ -284,7 +304,6 @@
         throw new Error("Infinite capacity path");
       }
       if (minCapacity <= 0) {
-        debugger;
         throw new Error("No residual capacity in this path");
       }
       return minCapacity;
@@ -335,17 +354,22 @@
       nodes = [];
       for (id in this.residualEdges[p.id]) {
         if (this.nodes[id] === void 0) {
-          debugger;
           throw "Undefined edge";
-        } else {
-          nodes.push(this.nodes[id]);
         }
+        nodes.push(this.nodes[id]);
       }
       return nodes;
     };
+    Graph.prototype.outgoingNeighbors = function(p) {
+      var id, _results;
+      _results = [];
+      for (id in this.edges[p.id]) {
+        _results.push(this.nodes[id]);
+      }
+      return _results;
+    };
     Graph.prototype.treeCapacity = function(p, q) {
       if (!p || !q) {
-        debugger;
         throw new Error("Invalid node in call to treeCapacity");
       }
       if (p.tree === this.SOURCE) {
@@ -371,9 +395,6 @@
     Graph.prototype.removeActive = function(p) {
       var i;
       i = this.active.indexOf(p);
-      if (i === -1) {
-        console.debug("Attempted to remove active node that was not active");
-      }
       return this.active.splice(i, 1);
     };
     Graph.prototype.findParent = function(p) {
@@ -446,7 +467,7 @@
   ImageGraph = (function() {
     __extends(ImageGraph, Graph);
     function ImageGraph(imageData1, imageData2) {
-      var leftColorDiff, leftNode, node, topColorDiff, topNode, x, y, _ref, _ref2;
+      var leftNode, node, topNode, weight, x, y, _ref, _ref2;
       ImageGraph.__super__.constructor.call(this);
       if (imageData1.width !== imageData2.width || imageData1.height !== imageData2.height) {
         throw "Image dimensions don't match";
@@ -455,8 +476,8 @@
       this.imageData2 = new PixelData(imageData2);
       this.width = this.imageData1.width;
       this.height = this.imageData1.height;
-      this.edgeMult = 1;
-      this.edgeMultDecay = 1;
+      this.edgeMult = 4;
+      this.edgeMultDecay = 0.8;
       this.fullGraph = true;
       for (y = 0, _ref = this.height; 0 <= _ref ? y < _ref : y > _ref; 0 <= _ref ? y++ : y--) {
         for (x = 0, _ref2 = this.width; 0 <= _ref2 ? x < _ref2 : x > _ref2; 0 <= _ref2 ? x++ : x--) {
@@ -464,19 +485,17 @@
             x: x,
             y: y
           });
-          if (this.fullGraph) {
-            if (x > 0) {
-              leftNode = this.getNode(x - 1, y);
-              leftColorDiff = this.colorDifference(x - 1, y, x, y);
-              this.addEdge(leftNode, node, leftColorDiff);
-              this.addEdge(node, leftNode, leftColorDiff);
-            }
-            if (y > 0) {
-              topNode = this.getNode(x, y - 1);
-              topColorDiff = this.colorDifference(x, y - 1, x, y);
-              this.addEdge(node, topNode, topColorDiff);
-              this.addEdge(topNode, node, topColorDiff);
-            }
+          if (x > 0) {
+            leftNode = this.getNode(x - 1, y);
+            weight = this.weight(x - 1, y, x, y);
+            this.addEdge(leftNode, node, weight);
+            this.addEdge(node, leftNode, weight);
+          }
+          if (y > 0) {
+            topNode = this.getNode(x, y - 1);
+            weight = this.weight(x, y - 1, x, y);
+            this.addEdge(node, topNode, weight);
+            this.addEdge(topNode, node, weight);
           }
         }
       }
@@ -484,63 +503,113 @@
     ImageGraph.prototype.getNode = function(x, y) {
       return this.nodes[y * this.height + x];
     };
+    ImageGraph.prototype.getEdge = function(px, py, qx, qy) {
+      return this.edges[py * this.width + px][qy * this.width + qx];
+    };
+    ImageGraph.prototype.weight = function(sx, sy, tx, ty) {
+      var diff, dx, dy, gs1, gs2, gt1, gt2, s1, s2, t1, t2;
+      s1 = this.imageData1.labColor(sx, sy);
+      s2 = this.imageData2.labColor(sx, sy);
+      t1 = this.imageData1.labColor(tx, ty);
+      t2 = this.imageData2.labColor(tx, ty);
+      diff = ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2);
+      if (this.SIMPLE_WEIGHT_CALC) {
+        return diff;
+      }
+      dx = tx - sx;
+      dy = ty - sy;
+      gs1 = ImageUtil.magnitude(this.imageData1.gradient(sx, sy, dx, dy));
+      gs2 = ImageUtil.magnitude(this.imageData2.gradient(sx, sy, dx, dy));
+      gt1 = ImageUtil.magnitude(this.imageData1.gradient(tx, ty, dx, dy));
+      gt2 = ImageUtil.magnitude(this.imageData2.gradient(tx, ty, dx, dy));
+      return diff / (gs1 + gs2 + gt1 + gt2);
+    };
     ImageGraph.prototype.colorDifference = function(sx, sy, tx, ty) {
       var s1, s2, t1, t2;
       s1 = this.imageData1.labColor(sx, sy);
       s2 = this.imageData2.labColor(sx, sy);
       t1 = this.imageData1.labColor(tx, ty);
       t2 = this.imageData2.labColor(tx, ty);
-      return this.imageData1.colorDifference(s1, s2) + this.imageData1.colorDifference(t1, t2);
+      return ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2);
     };
     ImageGraph.prototype.initWangTile = function() {
-      var edge, i, x, y, _i, _j, _k, _l, _len, _len2, _len3, _len4, _len5, _len6, _m, _n, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9, _results;
+      var i, x, y, _ref, _ref2, _ref3, _results;
       if (this.width !== this.height || this.width % 2 !== 0) {
         throw "Wang tiles must be square with even width and height";
       }
       for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
-        _ref2 = this.getNode(x, 0);
-        for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
-          edge = _ref2[_i];
-          edge.capacity *= this.edgeMult;
-        }
-        _ref3 = this.getNode(x, this.height - 1);
-        for (_j = 0, _len2 = _ref3.length; _j < _len2; _j++) {
-          edge = _ref3[_j];
-          edge.capacity *= this.edgeMult;
-        }
         this.setMultiSource(this.getNode(x, 0));
         this.setMultiSource(this.getNode(x, this.height - 1));
       }
-      for (y = 1, _ref4 = this.height - 1; 1 <= _ref4 ? y < _ref4 : y > _ref4; 1 <= _ref4 ? y++ : y--) {
-        _ref5 = this.getNode(0, y);
-        for (_k = 0, _len3 = _ref5.length; _k < _len3; _k++) {
-          edge = _ref5[_k];
-          edge.capacity *= this.edgeMult;
-        }
-        _ref6 = this.getNode(this.width - 1, y);
-        for (_l = 0, _len4 = _ref6.length; _l < _len4; _l++) {
-          edge = _ref6[_l];
-          edge.capacity *= this.edgeMult;
-        }
+      for (y = 1, _ref2 = this.height - 1; 1 <= _ref2 ? y < _ref2 : y > _ref2; 1 <= _ref2 ? y++ : y--) {
         this.setMultiSource(this.getNode(0, y));
         this.setMultiSource(this.getNode(this.width - 1, y));
       }
       _results = [];
-      for (i = 1, _ref7 = this.width - 1; 1 <= _ref7 ? i < _ref7 : i > _ref7; 1 <= _ref7 ? i++ : i--) {
-        _ref8 = this.getNode(i, i);
-        for (_m = 0, _len5 = _ref8.length; _m < _len5; _m++) {
-          edge = _ref8[_m];
-          edge.capacity *= this.edgeMult;
-        }
-        _ref9 = this.getNode(i, this.height - 1 - i);
-        for (_n = 0, _len6 = _ref9.length; _n < _len6; _n++) {
-          edge = _ref9[_n];
-          edge.capacity *= this.edgeMult;
-        }
+      for (i = 1, _ref3 = this.width - 1; 1 <= _ref3 ? i < _ref3 : i > _ref3; 1 <= _ref3 ? i++ : i--) {
         this.setMultiSink(this.getNode(i, i));
         _results.push(this.setMultiSink(this.getNode(i, this.height - 1 - i)));
       }
       return _results;
+    };
+    ImageGraph.prototype.weightTerminalEdges = function() {
+      var capacity, mult, p, q, x, y, _ref, _results;
+      _results = [];
+      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
+        _results.push((function() {
+          var _ref2, _results2;
+          _results2 = [];
+          for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
+            p = this.getNode(x, y);
+            _results2.push((function() {
+              var _i, _len, _ref3, _results3;
+              _ref3 = this.outgoingNeighbors(p);
+              _results3 = [];
+              for (_i = 0, _len = _ref3.length; _i < _len; _i++) {
+                q = _ref3[_i];
+                _results3.push(!this.isTerminal(q) ? (mult = this.getWeightMult(x, y), capacity = this.edges[p.id][q.id].capacity * mult, this.setCapacity(p, q, capacity)) : void 0);
+              }
+              return _results3;
+            }).call(this));
+          }
+          return _results2;
+        }).call(this));
+      }
+      return _results;
+    };
+    ImageGraph.prototype.terminalDistance = function(x, y) {
+      var sinkDist, sourceDist;
+      if (x === 0 || y === 0) {
+        return 0;
+      }
+      sourceDist = Math.min(x, this.width - x - 1, y, this.height - y - 1);
+      if (x < y) {
+        sinkDist = y - x;
+      } else if (x === y) {
+        return 0;
+      } else {
+        sinkDist = x - y;
+      }
+      if (x < this.height - 1 - y) {
+        sinkDist = Math.min(sinkDist, this.height - 1 - y - x);
+      } else if (x === this.height - 1 - y) {
+        return 0;
+      } else {
+        sinkDist = Math.min(sinkDist, x - this.height + 1 + y);
+      }
+      return Math.min(sourceDist, sinkDist);
+    };
+    ImageGraph.prototype.isTerminal = function(p) {
+      return p === this.source || p === this.sink;
+    };
+    ImageGraph.prototype.getWeightMult = function(x, y) {
+      var weightMult;
+      weightMult = this.TERMINAL_WEIGHT_MULT * Math.pow(this.TERMINAL_WEIGHT_DECAY, this.terminalDistance(x, y));
+      if (weightMult < 1) {
+        return 1;
+      } else {
+        return weightMult;
+      }
     };
     ImageGraph.prototype.computeGraft = function() {
       this.solve();

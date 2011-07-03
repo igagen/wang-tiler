@@ -18,7 +18,7 @@ describe "Graph", ->
       @aToSink = @graph.addEdge @a, @sink, 4
       @bToSink = @graph.addEdge @b, @sink, 5
 
-    describe "maxFlow", ->
+    describe "@maxFlow", ->
       it "should determine the correct max flow", ->
         @graph.solve()
         expect(@graph.maxFlow()).toBe 7
@@ -127,12 +127,12 @@ describe "Graph", ->
       @cToSink = @graph.addEdge @c, @sink, 20
       @dToSink = @graph.addEdge @d, @sink, 4
 
-    describe "maxFlow", ->
+    describe "@maxFlow", ->
       it "should determine the correct max flow", ->
         @graph.solve()
         expect(@graph.maxFlow()).toBe 23
 
-  describe "addFlow", ->
+  describe "@addFlow", ->
     beforeEach ->
       @graph = new Graph
       @a = @graph.addNode "A"
@@ -179,3 +179,34 @@ describe "Graph", ->
         expect(@graph.residualCapacity @b, @a).toBe 14
         expect(@aToB.flow).toBe 10
         expect(@bToA.flow).toBe 0
+
+  describe "@terminalDistance", ->
+    beforeEach ->
+      @graph = new ImageGraph { width: 0, height: 0 }, { width: 0, height: 0 }
+      @graph.width = 16
+      @graph.height = 16
+
+    describe "when the node is a source node", ->
+      it "returns zero", ->
+        expect(@graph.terminalDistance(0, 0)).toBe 0
+        expect(@graph.terminalDistance(4, 0)).toBe 0
+        expect(@graph.terminalDistance(0, 4)).toBe 0
+        expect(@graph.terminalDistance(0, 4)).toBe 0
+
+    describe "when the node is a sink node", ->
+      it "returns zero", ->
+        expect(@graph.terminalDistance(5, 5)).toBe 0
+        expect(@graph.terminalDistance(1, 14)).toBe 0
+
+    describe "when the node is not a source or sink", ->
+      it "returns the distance to the nearest source or sink", ->
+        expect(@graph.terminalDistance(1, 3)).toBe 1
+        expect(@graph.terminalDistance(2, 4)).toBe 2
+        expect(@graph.terminalDistance(5, 3)).toBe 2
+        expect(@graph.terminalDistance(9, 3)).toBe 3
+        expect(@graph.terminalDistance(12, 5)).toBe 2
+        expect(@graph.terminalDistance(9, 12)).toBe 3
+        expect(@graph.terminalDistance(12, 11)).toBe 1
+        expect(@graph.terminalDistance(8, 14)).toBe 1
+        expect(@graph.terminalDistance(3, 11)).toBe 1
+        expect(@graph.terminalDistance(1, 7)).toBe 1

@@ -15,7 +15,7 @@
         this.aToSink = this.graph.addEdge(this.a, this.sink, 4);
         return this.bToSink = this.graph.addEdge(this.b, this.sink, 5);
       });
-      describe("maxFlow", function() {
+      describe("@maxFlow", function() {
         it("should determine the correct max flow", function() {
           this.graph.solve();
           return expect(this.graph.maxFlow()).toBe(7);
@@ -99,14 +99,14 @@
         this.cToSink = this.graph.addEdge(this.c, this.sink, 20);
         return this.dToSink = this.graph.addEdge(this.d, this.sink, 4);
       });
-      return describe("maxFlow", function() {
+      return describe("@maxFlow", function() {
         return it("should determine the correct max flow", function() {
           this.graph.solve();
           return expect(this.graph.maxFlow()).toBe(23);
         });
       });
     });
-    return describe("addFlow", function() {
+    describe("@addFlow", function() {
       beforeEach(function() {
         this.graph = new Graph;
         this.a = this.graph.addNode("A");
@@ -153,6 +153,47 @@
           expect(this.graph.residualCapacity(this.b, this.a)).toBe(14);
           expect(this.aToB.flow).toBe(10);
           return expect(this.bToA.flow).toBe(0);
+        });
+      });
+    });
+    return describe("@terminalDistance", function() {
+      beforeEach(function() {
+        this.graph = new ImageGraph({
+          width: 0,
+          height: 0
+        }, {
+          width: 0,
+          height: 0
+        });
+        this.graph.width = 16;
+        return this.graph.height = 16;
+      });
+      describe("when the node is a source node", function() {
+        return it("returns zero", function() {
+          expect(this.graph.terminalDistance(0, 0)).toBe(0);
+          expect(this.graph.terminalDistance(4, 0)).toBe(0);
+          expect(this.graph.terminalDistance(0, 4)).toBe(0);
+          return expect(this.graph.terminalDistance(0, 4)).toBe(0);
+        });
+      });
+      describe("when the node is a sink node", function() {
+        return it("returns zero", function() {
+          expect(this.graph.terminalDistance(5, 5)).toBe(0);
+          return expect(this.graph.terminalDistance(1, 14)).toBe(0);
+        });
+      });
+      return describe("when the node is not a source or sink", function() {
+        return it("returns the distance to the nearest source or sink", function() {
+          expect(this.graph.terminalDistance(1, 3)).toBe(1);
+          expect(this.graph.terminalDistance(2, 4)).toBe(2);
+          expect(this.graph.terminalDistance(5, 3)).toBe(2);
+          expect(this.graph.terminalDistance(9, 3)).toBe(3);
+          expect(this.graph.terminalDistance(12, 5)).toBe(2);
+          expect(this.graph.terminalDistance(9, 12)).toBe(3);
+          expect(this.graph.terminalDistance(12, 11)).toBe(1);
+          expect(this.graph.terminalDistance(8, 14)).toBe(1);
+          expect(this.graph.terminalDistance(3, 11)).toBe(1);
+          return expect(this.graph.terminalDistance(1, 7)).toBe(1);
         });
       });
     });

@@ -9,7 +9,7 @@ var WangView = Backbone.View.extend({
     "mousemove canvas": "handleMouseMove"
   },
 
-  BLOCK_SIZE: 64,
+  BLOCK_SIZE: 48,
   MAX_ITERATIONS: 100,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
@@ -158,7 +158,7 @@ var WangView = Backbone.View.extend({
     var bestRect;
     for (var i = 0; i < maxIterations; i++) {
       var r = this.getRandomRectWithoutDupCheck();
-      
+
       var diff = this.getSubSampleDiff(tile, r);
       if (diff < minDiff) {
         minDiff = diff;
@@ -410,10 +410,6 @@ var WangView = Backbone.View.extend({
   },
 
   drawTiles: function(context, width, height) {
-    // var tileContext = this["ryryWangTileContext"];
-    // var imageData = tileContext.getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
-    // this.targetContext.putImageData(imageData, 0, 0);
-    
     var x, y, tile;
     var xTiles = width / this.BLOCK_SIZE;
     var yTiles = height / this.BLOCK_SIZE;
@@ -438,8 +434,6 @@ var WangView = Backbone.View.extend({
           // Interior tile, match top and left
           tiles[x][y] = this.matchTile(new RegExp(tiles[x][y - 1][2] + ".." + tiles[x - 1][y][1]));
         }
-        
-        // console.debug("(" + x + ", " + y + "): " + tiles[x][y]);
 
         var tileContext = this[tiles[x][y] + "WangTileContext"];
         var imageData = tileContext.getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
