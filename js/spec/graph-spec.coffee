@@ -182,7 +182,7 @@ describe "Graph", ->
 
   describe "@terminalDistance", ->
     beforeEach ->
-      @graph = new ImageGraph { width: 0, height: 0 }, { width: 0, height: 0 }
+      @graph = new WangTile { width: 0, height: 0 }, { width: 0, height: 0 }
       @graph.width = 16
       @graph.height = 16
 

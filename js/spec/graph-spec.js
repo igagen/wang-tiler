@@ -158,7 +158,7 @@
     });
     return describe("@terminalDistance", function() {
       beforeEach(function() {
-        this.graph = new ImageGraph({
+        this.graph = new WangTile({
           width: 0,
           height: 0
         }, {

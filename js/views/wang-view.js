@@ -10,7 +10,7 @@ var WangView = Backbone.View.extend({
   },
 
   BLOCK_SIZE: 64,
-  MAX_ITERATIONS: 20,
+  MAX_ITERATIONS: 50,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
 
@@ -128,6 +128,10 @@ var WangView = Backbone.View.extend({
   handleMouseUp: function(event) {
     var r = this.getSelectionRect(event);
     if (r.width >= this.BLOCK_SIZE && r.height >= this.BLOCK_SIZE) {
+      r.x = Math.floor(r.x);
+      r.y = Math.floor(r.y);
+      r.width = Math.floor(r.width);
+      r.height = Math.floor(r.height);
       this.sampleRect = r;
       this.drawSampleRect(this.sampleRect);
       this.generateDiamonds();
@@ -188,8 +192,6 @@ var WangView = Backbone.View.extend({
       }
     }
 
-    console.debug("Image diff: " + minDiff);
-
     this.subSamples.push(bestRect);
     return bestRect;
   },
@@ -208,23 +210,30 @@ var WangView = Backbone.View.extend({
 
       for (var j = 0; j < this.MAX_ITERATIONS; j++) {
         var r = this.getRandomRectWithoutDupCheck();
-        var subSampleData = this.scratch2Context.getImageData(r.x, r.y, this.BLOCK_SIZE, this.BLOCK_SIZE);
+        var subSampleData = this.scratch2Context.getImageData(this.sampleRect.x + r.x, this.sampleRect.y + r.y, this.BLOCK_SIZE, this.BLOCK_SIZE);
         var wt = new WangTile(diamondTileData, subSampleData);
+        wt.init();
 
         if (wt.maxRegionDiff < minDiff) {
-          console.debug("New min (" + j + "): " + wt.maxRegionDiff);
           rect = r;
           wangTile = wt;
           minDiff = wt.maxRegionDiff;
+          
+          console.debug("Found lower error sub-sample (" + j + "): " + wt.maxRegionDiff);
         }
       }
 
-      console.debug("DRAWING: " + wangTile.maxRegionDiff);
-      this[tile + 'SubSampleContext'].drawImage(this.sourceImage, r.x, r.y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+      console.debug("Drawing tile " + i + " with error: " + Math.floor(wangTile.maxRegionDiff));
+      try {
+        this[tile + 'SubSampleContext'].drawImage(this.sourceImage, this.sampleRect.x + rect.x, this.sampleRect.y + rect.y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+      }
+      catch (e) {
+        debugger;
+      }
       this.subSampleMap[tile] = rect;
       this.subSamples.push(rect);
       this.drawSubSampleRect(rect.x, rect.y, tile);
-      this[tile + 'CuttingPathContext'].drawImage(this.sourceImage, rect.x, rect.y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+      this[tile + 'CuttingPathContext'].drawImage(this.sourceImage, this.sampleRect.x + rect.x, this.sampleRect.y + rect.y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
 
       wangTile.computeGraft();
       wangTile.drawWangTile(this[tile + 'WangTileContext']);
@@ -296,7 +305,6 @@ var WangView = Backbone.View.extend({
 
     if (rects.length == 0) {
       var r = this.getRandomRectWithoutDupCheck();
-      console.debug("RETURNING first rect: " + r.x + ", " + r.y);
       rects.push(r);
       return r;
     }
@@ -309,21 +317,18 @@ var WangView = Backbone.View.extend({
     while (i-- > 0) {
       r = this.getRandomRectWithoutDupCheck();
       if (!this.rectanglesOverlap(r, rects)) {
-        console.debug("RETURNING non overlapping rect: " + r.x + ", " + r.y);
         rects.push(r);
         return r;
       }
       else {
         dist = this.getMinDist(r, rects);
         if (dist > maxDist) {
-          console.debug("Found new max distance rect: " + r.x + ", " + r.y);
           maxDist = dist;
           rect = r;
         }
       }
     }
 
-    console.debug("RETURNING furthest rect: " + rect.x + ", " + rect.y);
     rects.push(rect);
     return r;
   },
@@ -397,7 +402,12 @@ var WangView = Backbone.View.extend({
     // and copies it to the top triangle of the appropriately colored tiles
     var x = this.sampleRect.x + this.diamondMap[color].x;
     var y = this.sampleRect.y + this.diamondMap[color].y + this.BLOCK_SIZE / 2;
-    this.scratchContext.drawImage(this.sourceImage, x, y, this.BLOCK_SIZE, this.BLOCK_SIZE / 2, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE / 2);
+    try {
+      this.scratchContext.drawImage(this.sourceImage, x, y, this.BLOCK_SIZE, this.BLOCK_SIZE / 2, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE / 2);
+    }
+    catch (e) {
+      debugger;
+    }
     this.pattern = this.scratchContext.createPattern(this.scratchCanvas[0], 'no-repeat');
 
     context.fillStyle = this.pattern;

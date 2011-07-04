@@ -11,13 +11,13 @@
   WangTile = (function() {
     __extends(WangTile, ImageGraph);
     WangTile.prototype.ROUNDING_TOLERANCE = 0.001;
-    WangTile.prototype.TERMINAL_WEIGHT_MULT = 5;
-    WangTile.prototype.TERMINAL_MULT_DECAY = 0.6;
+    WangTile.prototype.TERMINAL_WEIGHT_MULT = 3;
+    WangTile.prototype.TERMINAL_WEIGHT_DECAY = 0.65;
     WangTile.prototype.WEIGHT_TERMINAL_EDGES = true;
     WangTile.prototype.ADD_DIAGONAL_EDGES = true;
     WangTile.prototype.SIMPLE_WEIGHT_CALC = true;
+    WangTile.prototype.REGION_DIFF_CORNERS_ONLY = true;
     function WangTile(imageData1, imageData2, weightData) {
-      var base, bottomLeftDiff, bottomRightDiff, diffSum, i, l, l2ulw, leftNode, luh, lw, maxRegionDiff, n, node, r, r2urw, regionSize, ruh, rw, topLeftDiff, topNode, topRightDiff, u, u2ulw, u2urw, ul, ulh, ur, urh, uw, weight, weightSum, x, y, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7;
       if (weightData == null) {
         weightData = null;
       }
@@ -26,6 +26,9 @@
         throw "Wang tiles must be square with even width and height";
       }
       this.size = this.width;
+    }
+    WangTile.prototype.init = function() {
+      var base, bottomDiff, bottomLeftDiff, bottomRightDiff, diffSum, i, l, l2ulw, leftDiff, leftNode, luh, lw, maxRegionDiff, n, node, r, r2urw, regionSize, rightDiff, ruh, rw, topDiff, topLeftDiff, topNode, topRightDiff, u, u2ulw, u2urw, ul, ulh, ur, urh, uw, weight, weightSum, x, y, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _results;
       maxRegionDiff = 0;
       regionSize = Math.floor(this.size / 4);
       base = this.size - regionSize - 1;
@@ -33,8 +36,16 @@
       topRightDiff = this.imageData1.regionDiff(this.imageData2, base, 0, regionSize, regionSize);
       bottomRightDiff = this.imageData1.regionDiff(this.imageData2, base, base, regionSize, regionSize);
       bottomLeftDiff = this.imageData1.regionDiff(this.imageData2, 0, 0, regionSize, regionSize);
-      this.maxRegionDiff = Math.max(topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff);
-      if (weightData != null) {
+      if (!this.REGION_DIFF_CORNERS_ONLY) {
+        topDiff = this.imageData1.regionDiff(this.imageData2, regionSize, 0, 2 * regionSize, regionSize);
+        rightDiff = this.imageData1.regionDiff(this.imageData2, base, regionSize, regionSize, 2 * regionSize);
+        bottomDiff = this.imageData1.regionDiff(this.imageData2, regionSize, base, 2 * regionSize, regionSize);
+        leftDiff = this.imageData1.regionDiff(this.imageData2, 0, regionSize, regionSize, 2 * regionSize);
+        this.maxRegionDiff = Math.max(topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff, topDiff, rightDiff, bottomDiff, leftDiff);
+      } else {
+        this.maxRegionDiff = Math.max(topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff);
+      }
+      if (typeof weightData !== "undefined" && weightData !== null) {
         this.weightData = new PixelData(weightData);
       }
       weightSum = 0;
@@ -102,21 +113,44 @@
         this.setMultiSource(this.getNode(0, y));
         this.setMultiSource(this.getNode(this.width - 1, y));
       }
+      _results = [];
       for (i = 1, _ref7 = this.width - 1; 1 <= _ref7 ? i < _ref7 : i > _ref7; 1 <= _ref7 ? i++ : i--) {
         this.setMultiSink(this.getNode(i, i));
-        this.setMultiSink(this.getNode(i, this.height - 1 - i));
+        _results.push(this.setMultiSink(this.getNode(i, this.height - 1 - i)));
       }
-    }
+      return _results;
+    };
     WangTile.prototype.weight = function(sx, sy, tx, ty) {
-      var mult;
-      mult = 1;
-      if (sx === 0 || tx === 0 || sx === (this.width - 1) || tx === (this.width - 1) || sy === 0 || ty === 0 || sy === (this.height - 1) || ty === (this.height - 1)) {
-        mult = this.TERMINAL_WEIGHT_MULT;
-      }
-      if (sx === sy || tx === ty || sx === (this.height - 1 - sy) || tx === (this.height - 1 - ty)) {
-        mult = this.TERMINAL_WEIGHT_MULT;
+      var mult, terminalDist;
+      terminalDist = Math.min(this.terminalDistance(sx, sy), this.terminalDistance(tx, ty));
+      mult = this.TERMINAL_WEIGHT_MULT * Math.pow(this.TERMINAL_WEIGHT_DECAY, terminalDist);
+      if (mult < 1) {
+        mult = 1;
       }
       return mult * WangTile.__super__.weight.call(this, sx, sy, tx, ty);
+    };
+    WangTile.prototype.sourceDistance = function(x, y) {
+      return Math.min(x, this.width - x - 1, y, this.height - y - 1);
+    };
+    WangTile.prototype.sinkDistance = function(x, y) {
+      var sinkDist;
+      if (x < y) {
+        sinkDist = y - x;
+      } else if (x === y) {
+        return 0;
+      } else {
+        sinkDist = x - y;
+      }
+      if (x < this.height - 1 - y) {
+        return sinkDist = Math.min(sinkDist, this.height - 1 - y - x);
+      } else if (x === this.height - 1 - y) {
+        return 0;
+      } else {
+        return sinkDist = Math.min(sinkDist, x - this.height + 1 + y);
+      }
+    };
+    WangTile.prototype.terminalDistance = function(x, y) {
+      return Math.min(this.sourceDistance(x, y), this.sinkDistance(x, y));
     };
     WangTile.prototype.drawWangTile = function(context) {
       var imageData, node, rawImageData, x, y, _i, _j, _len, _len2, _ref, _ref2;

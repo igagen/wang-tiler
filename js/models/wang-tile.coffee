@@ -3,11 +3,12 @@
 
 class WangTile extends ImageGraph
   ROUNDING_TOLERANCE: 0.001
-  TERMINAL_WEIGHT_MULT: 5
-  TERMINAL_MULT_DECAY: 0.6
+  TERMINAL_WEIGHT_MULT: 3
+  TERMINAL_WEIGHT_DECAY: 0.65
   WEIGHT_TERMINAL_EDGES: true
   ADD_DIAGONAL_EDGES: true
   SIMPLE_WEIGHT_CALC: true
+  REGION_DIFF_CORNERS_ONLY: true
 
   constructor: (imageData1, imageData2, weightData = null) ->
     super(imageData1, imageData2)
@@ -17,16 +18,28 @@ class WangTile extends ImageGraph
 
     @size = @width
 
+  init: ->
     maxRegionDiff = 0
     regionSize = Math.floor(@size / 4)
     base = @size - regionSize - 1
 
+    # Corners
     topLeftDiff = @imageData1.regionDiff @imageData2, 0, 0, regionSize, regionSize
     topRightDiff = @imageData1.regionDiff @imageData2, base, 0, regionSize, regionSize
     bottomRightDiff = @imageData1.regionDiff @imageData2, base, base, regionSize, regionSize
     bottomLeftDiff = @imageData1.regionDiff @imageData2, 0, 0, regionSize, regionSize
 
-    @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff
+    # Edges
+    if !@REGION_DIFF_CORNERS_ONLY
+      topDiff = @imageData1.regionDiff @imageData2, regionSize, 0, 2 * regionSize, regionSize
+      rightDiff = @imageData1.regionDiff @imageData2, base, regionSize, regionSize, 2 * regionSize
+      bottomDiff = @imageData1.regionDiff @imageData2, regionSize, base, 2 * regionSize, regionSize
+      leftDiff = @imageData1.regionDiff @imageData2, 0, regionSize, regionSize, 2 * regionSize
+
+      @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff, topDiff, rightDiff, bottomDiff, leftDiff
+    else
+      @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff
+
     # console.debug "Region diff: #{@maxRegionDiff} - (#{topLeftDiff}, #{topRightDiff}, #{bottomRightDiff}, #{bottomLeftDiff})"
 
     @weightData = new PixelData(weightData) if weightData?
@@ -114,14 +127,32 @@ class WangTile extends ImageGraph
       @setMultiSink @getNode(i, @height - 1 - i)
 
   weight: (sx, sy, tx, ty) ->
-    mult = 1
-    if sx == 0 || tx == 0 || sx == (@width - 1) || tx == (@width - 1) || sy == 0 || ty == 0 || sy == (@height - 1) || ty == (@height - 1)
-      mult = @TERMINAL_WEIGHT_MULT
-
-    if sx == sy || tx == ty || sx == (@height - 1 - sy) || tx == (@height - 1 - ty)
-      mult = @TERMINAL_WEIGHT_MULT
+    terminalDist = Math.min @terminalDistance(sx, sy), @terminalDistance(tx, ty)
+    mult = @TERMINAL_WEIGHT_MULT * Math.pow @TERMINAL_WEIGHT_DECAY, terminalDist
+    mult = 1 if mult < 1
 
     mult * super(sx, sy, tx, ty)
+
+  sourceDistance: (x, y) ->
+    Math.min(x, @width - x - 1, y, @height - y - 1)
+
+  sinkDistance: (x, y) ->
+    if x < y
+      sinkDist = y - x
+    else if x == y
+      return 0 # Sink node
+    else # x > y
+      sinkDist = x - y
+
+    if x < @height - 1 - y
+      sinkDist = Math.min(sinkDist, @height - 1 - y - x)
+    else if x == @height - 1 - y
+      return 0 # Sink node
+    else
+      sinkDist = Math.min(sinkDist, x - @height + 1 + y)
+
+  terminalDistance: (x, y) ->
+    Math.min @sourceDistance(x, y), @sinkDistance(x, y)
 
   drawWangTile: (context) ->
     rawImageData = context.createImageData @width, @height
