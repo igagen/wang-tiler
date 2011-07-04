@@ -9,8 +9,8 @@ var WangView = Backbone.View.extend({
     "mousemove canvas": "handleMouseMove"
   },
 
-  BLOCK_SIZE: 70,
-  MAX_ITERATIONS: 100,
+  BLOCK_SIZE: 64,
+  MAX_ITERATIONS: 20,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
 
@@ -20,10 +20,12 @@ var WangView = Backbone.View.extend({
     this.sourceCanvas = $("#source-canvas");
     this.targetCanvas = $("#target-canvas");
     this.scratchCanvas = $("#scratch-canvas");
+    this.scratch2Canvas = $("#scratch2-canvas");
     this.weightCanvas = $("#weight-canvas");
     this.sourceContext = this.sourceCanvas[0].getContext("2d");
     this.targetContext = this.targetCanvas[0].getContext("2d");
     this.scratchContext = this.scratchCanvas[0].getContext("2d");
+    this.scratch2Context = this.scratch2Canvas[0].getContext("2d");
     this.weightContext = this.weightCanvas[0].getContext("2d");
 
     this.tiles = {};
@@ -84,8 +86,11 @@ var WangView = Backbone.View.extend({
 
     this.sourceCanvas.attr('width', this.sourceWidth);
     this.sourceCanvas.attr('height', this.sourceHeight);
+    this.scratch2Canvas.attr('width', this.sourceWidth);
+    this.scratch2Canvas.attr('height', this.sourceHeight);
 
     this.sourceContext.drawImage(this.sourceImage, 0, 0);
+    this.scratch2Context.drawImage(this.sourceImage, 0, 0);
   },
 
   weightImageLoaded: function() {
@@ -127,7 +132,6 @@ var WangView = Backbone.View.extend({
       this.drawSampleRect(this.sampleRect);
       this.generateDiamonds();
       this.generateDiamondTiles();
-      this.generateSubSamples();
       this.generateWangTiles();
     }
     else {
@@ -169,14 +173,6 @@ var WangView = Backbone.View.extend({
     this.drawDiamond(this.sampleRect.x + this.yellowDiamond.x, this.sampleRect.y + this.yellowDiamond.y, 'rgba(255,255,0,0.4)');
   },
 
-  getSubSampleDiff: function(tile, rect) {
-    this.scratchContext.drawImage(this.sourceImage, rect.x, rect.y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
-    var subSampleData = new PixelData(this.scratchContext.getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE));
-    var diamondTileData = new PixelData(this[tile + 'DiamondTileContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE));
-
-    return subSampleData.imageDiff(diamondTileData);
-  },
-
   addBestRect: function(tile) {
     var maxIterations = 50;
     var minDiff = Infinity;
@@ -198,29 +194,39 @@ var WangView = Backbone.View.extend({
     return bestRect;
   },
 
-  generateSubSamples: function() {
+  generateWangTiles: function() {
     this.subSamples = [];
     this.subSampleMap = {};
-    for (var i = 0; i < this.TILES.length; i++) {
-      var tile = this.TILES[i];
-      var r = this.addRandomRect(this.subSamples);
-      // var r = this.addBestRect(tile);
 
-      this.subSampleMap[tile] = r;
-
-      this.drawSubSampleRect(r.x, r.y, tile);
-    }
-  },
-
-  generateWangTiles: function() {
     for (var i = 0; i < this.TILES.length; i++) {
       var tile = this.TILES[i];
 
       var diamondTileData = this[tile + 'DiamondTileContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
-      var subSampleData = this[tile + 'SubSampleContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
-      var wangTile = new WangTile(diamondTileData, subSampleData);
+
+      var rect, wangTile;
+      var minDiff = Infinity;
+
+      for (var j = 0; j < this.MAX_ITERATIONS; j++) {
+        var r = this.getRandomRectWithoutDupCheck();
+        var subSampleData = this.scratch2Context.getImageData(r.x, r.y, this.BLOCK_SIZE, this.BLOCK_SIZE);
+        var wt = new WangTile(diamondTileData, subSampleData);
+
+        if (wt.maxRegionDiff < minDiff) {
+          console.debug("New min (" + j + "): " + wt.maxRegionDiff);
+          rect = r;
+          wangTile = wt;
+          minDiff = wt.maxRegionDiff;
+        }
+      }
+
+      console.debug("DRAWING: " + wangTile.maxRegionDiff);
+      this[tile + 'SubSampleContext'].drawImage(this.sourceImage, r.x, r.y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+      this.subSampleMap[tile] = rect;
+      this.subSamples.push(rect);
+      this.drawSubSampleRect(rect.x, rect.y, tile);
+      this[tile + 'CuttingPathContext'].drawImage(this.sourceImage, rect.x, rect.y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+
       wangTile.computeGraft();
-      // console.debug(wangTile.maxFlow);
       wangTile.drawWangTile(this[tile + 'WangTileContext']);
       wangTile.drawPath(this[tile + 'CuttingPathContext']);
       wangTile.drawXWeight(this[tile + 'XWeightContext']);
@@ -281,10 +287,6 @@ var WangView = Backbone.View.extend({
       c.moveTo(x0, y0);
       c.lineTo(x1, y1);
       c.stroke();
-
-      // Draw sub-samples to their own canvases for later use
-      this[coloring + 'SubSampleContext'].drawImage(this.sourceImage, x, y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
-      this[coloring + 'CuttingPathContext'].drawImage(this.sourceImage, x, y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
     }
   },
 
@@ -294,22 +296,53 @@ var WangView = Backbone.View.extend({
 
     if (rects.length == 0) {
       var r = this.getRandomRectWithoutDupCheck();
+      console.debug("RETURNING first rect: " + r.x + ", " + r.y);
       rects.push(r);
       return r;
     }
 
     var r = null;
+    var rect = null;
+    var dist;
+    var maxDist = 0;
     var i = this.MAX_ITERATIONS;
     while (i-- > 0) {
       r = this.getRandomRectWithoutDupCheck();
       if (!this.rectanglesOverlap(r, rects)) {
+        console.debug("RETURNING non overlapping rect: " + r.x + ", " + r.y);
         rects.push(r);
         return r;
       }
+      else {
+        dist = this.getMinDist(r, rects);
+        if (dist > maxDist) {
+          console.debug("Found new max distance rect: " + r.x + ", " + r.y);
+          maxDist = dist;
+          rect = r;
+        }
+      }
     }
 
-    rects.push(r);
+    console.debug("RETURNING furthest rect: " + rect.x + ", " + rect.y);
+    rects.push(rect);
     return r;
+  },
+
+  getMinDist: function(r, rects) {
+    // Returns the minimum distance to the other rectangles
+    var minDist = Infinity;
+    for (var i = 0; i < rects.length; i++) {
+      var dist = this.getDist(r, rects[i]);
+      if (dist < minDist) minDist = dist;
+    }
+
+    return minDist;
+  },
+
+  getDist: function(r1, r2) {
+    var dx = r2.x - r1.x;
+    var dy = r2.y - r1.y;
+    return Math.sqrt(dx * dx + dy * dy);
   },
 
   rectanglesOverlap: function(r1, rects) {
@@ -329,8 +362,8 @@ var WangView = Backbone.View.extend({
     var validWidth = this.sampleRect.width - this.BLOCK_SIZE;
     var validHeight = this.sampleRect.height - this.BLOCK_SIZE;
 
-    var x = Math.random() * validWidth;
-    var y = Math.random() * validHeight;
+    var x = Math.floor(Math.random() * validWidth);
+    var y = Math.floor(Math.random() * validHeight);
 
     return { x: x, y: y };
   },

@@ -15,7 +15,7 @@
     WangTile.prototype.TERMINAL_MULT_DECAY = 0.6;
     WangTile.prototype.WEIGHT_TERMINAL_EDGES = true;
     WangTile.prototype.ADD_DIAGONAL_EDGES = true;
-    WangTile.prototype.SIMPLE_WEIGHT_CALC = false;
+    WangTile.prototype.SIMPLE_WEIGHT_CALC = true;
     function WangTile(imageData1, imageData2, weightData) {
       var base, bottomLeftDiff, bottomRightDiff, diffSum, i, l, l2ulw, leftNode, luh, lw, maxRegionDiff, n, node, r, r2urw, regionSize, ruh, rw, topLeftDiff, topNode, topRightDiff, u, u2ulw, u2urw, ul, ulh, ur, urh, uw, weight, weightSum, x, y, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7;
       if (weightData == null) {
@@ -34,7 +34,6 @@
       bottomRightDiff = this.imageData1.regionDiff(this.imageData2, base, base, regionSize, regionSize);
       bottomLeftDiff = this.imageData1.regionDiff(this.imageData2, 0, 0, regionSize, regionSize);
       this.maxRegionDiff = Math.max(topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff);
-      console.debug("Region diff: " + this.maxRegionDiff + " - (" + topLeftDiff + ", " + topRightDiff + ", " + bottomRightDiff + ", " + bottomLeftDiff + ")");
       if (weightData != null) {
         this.weightData = new PixelData(weightData);
       }

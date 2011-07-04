@@ -7,7 +7,7 @@ class WangTile extends ImageGraph
   TERMINAL_MULT_DECAY: 0.6
   WEIGHT_TERMINAL_EDGES: true
   ADD_DIAGONAL_EDGES: true
-  SIMPLE_WEIGHT_CALC: false
+  SIMPLE_WEIGHT_CALC: true
 
   constructor: (imageData1, imageData2, weightData = null) ->
     super(imageData1, imageData2)
@@ -27,7 +27,7 @@ class WangTile extends ImageGraph
     bottomLeftDiff = @imageData1.regionDiff @imageData2, 0, 0, regionSize, regionSize
 
     @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff
-    console.debug "Region diff: #{@maxRegionDiff} - (#{topLeftDiff}, #{topRightDiff}, #{bottomRightDiff}, #{bottomLeftDiff})"
+    # console.debug "Region diff: #{@maxRegionDiff} - (#{topLeftDiff}, #{topRightDiff}, #{bottomRightDiff}, #{bottomLeftDiff})"
 
     @weightData = new PixelData(weightData) if weightData?
 

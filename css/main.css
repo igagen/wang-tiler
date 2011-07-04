@@ -18,7 +18,7 @@ canvas {
   margin: 3px;
 }
 
-#scratch-canvas, #weight-canvas {
+#scratch-canvas, #scratch2-canvas, #weight-canvas {
   display: none;
 }
 
