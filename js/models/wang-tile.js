@@ -11,8 +11,8 @@
   WangTile = (function() {
     __extends(WangTile, ImageGraph);
     WangTile.prototype.ROUNDING_TOLERANCE = 0.001;
-    WangTile.prototype.TERMINAL_WEIGHT_MULT = 3;
-    WangTile.prototype.TERMINAL_WEIGHT_DECAY = 0.65;
+    WangTile.prototype.TERMINAL_WEIGHT_MULT = 4;
+    WangTile.prototype.TERMINAL_WEIGHT_DECAY = 0.5;
     WangTile.prototype.WEIGHT_TERMINAL_EDGES = true;
     WangTile.prototype.ADD_DIAGONAL_EDGES = true;
     WangTile.prototype.SIMPLE_WEIGHT_CALC = true;

@@ -10,7 +10,7 @@ var WangView = Backbone.View.extend({
   },
 
   BLOCK_SIZE: 64,
-  MAX_ITERATIONS: 50,
+  MAX_ITERATIONS: 30,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
 
