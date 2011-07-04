@@ -9,39 +9,53 @@ var WangView = Backbone.View.extend({
     "mousemove canvas": "handleMouseMove"
   },
 
-  BLOCK_SIZE: 48,
+  BLOCK_SIZE: 80,
   MAX_ITERATIONS: 100,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
 
   initialize: function() {
-    _.bindAll(this, "setSourceImage", "imageLoaded", "handleMouseDown", "handleMouseUp", "handleMouseMove");
+    _.bindAll(this, "setSourceImage", "imageLoaded", "weightImageLoaded", "handleMouseDown", "handleMouseUp", "handleMouseMove");
 
     this.sourceCanvas = $("#source-canvas");
     this.targetCanvas = $("#target-canvas");
     this.scratchCanvas = $("#scratch-canvas");
+    this.weightCanvas = $("#weight-canvas");
+    this.sourceContext = this.sourceCanvas[0].getContext("2d");
+    this.targetContext = this.targetCanvas[0].getContext("2d");
+    this.scratchContext = this.scratchCanvas[0].getContext("2d");
+    this.weightContext = this.weightCanvas[0].getContext("2d");
+
     this.tiles = {};
 
     for (var i = 0; i < this.TILES.length; i++) {
       var tile = this.TILES[i];
       this.tiles[tile] = {};
 
+      this[tile + 'WangTileCanvas'] = $("#wang-tiles ." + tile);
+      this[tile + 'WangTileContext'] = this[tile + 'WangTileCanvas'][0].getContext("2d");
       this[tile + 'DiamondTileCanvas'] = $("#diamond-tiles ." + tile);
       this[tile + 'DiamondTileContext'] = this[tile + 'DiamondTileCanvas'][0].getContext("2d");
       this[tile + 'SubSampleCanvas'] = $("#sub-samples ." + tile);
       this[tile + 'SubSampleContext'] = this[tile + 'SubSampleCanvas'][0].getContext("2d");
-      this[tile + 'WangTileCanvas'] = $("#wang-tiles ." + tile);
-      this[tile + 'WangTileContext'] = this[tile + 'WangTileCanvas'][0].getContext("2d");
+      this[tile + 'CuttingPathCanvas'] = $("#cutting-paths ." + tile);
+      this[tile + 'CuttingPathContext'] = this[tile + 'CuttingPathCanvas'][0].getContext("2d");
+      this[tile + 'XWeightCanvas'] = $("#x-weights ." + tile);
+      this[tile + 'XWeightContext'] = this[tile + 'XWeightCanvas'][0].getContext("2d");
+      this[tile + 'YWeightCanvas'] = $("#y-weights ." + tile);
+      this[tile + 'YWeightContext'] = this[tile + 'YWeightCanvas'][0].getContext("2d");
+      this[tile + 'ImageDiffCanvas'] = $("#image-diffs ." + tile);
+      this[tile + 'ImageDiffContext'] = this[tile + 'ImageDiffCanvas'][0].getContext("2d");
+      this[tile + 'XGradientCanvas'] = $("#x-gradients ." + tile);
+      this[tile + 'XGradientContext'] = this[tile + 'XGradientCanvas'][0].getContext("2d");
+      this[tile + 'YGradientCanvas'] = $("#y-gradients ." + tile);
+      this[tile + 'YGradientContext'] = this[tile + 'YGradientCanvas'][0].getContext("2d");
     }
-
-    this.sourceContext = this.sourceCanvas[0].getContext("2d");
-    this.scratchContext = this.scratchCanvas[0].getContext("2d");
-    this.targetContext = this.targetCanvas[0].getContext("2d");
 
     this.imageUploadButton = $("#image-upload-button");
 
     var blockSize = this.BLOCK_SIZE;
-    $("#diamond-tiles canvas, #sub-samples canvas, #wang-tiles canvas, #scratch-canvas").each(function() {
+    $("#diamond-tiles canvas, #sub-samples canvas, #wang-tiles canvas, #cutting-paths canvas, #x-weights canvas, #y-weights canvas, #image-diffs canvas, #x-gradients canvas, #y-gradients canvas, #scratch-canvas").each(function() {
       $(this).attr('width', blockSize);
       $(this).attr('height', blockSize);
     });
@@ -58,6 +72,10 @@ var WangView = Backbone.View.extend({
     this.sourceImage.onload = this.imageLoaded;
     // this.sourceImage.src = this.imageUploadButton.val().replace(/C:\\fakepath\\/, 'images/');
     this.sourceImage.src = $("#source-image").attr('src');
+
+    this.weightImage = new Image();
+    this.weightImage.onload = this.weightImageLoaded;
+    this.weightImage.src = $("#weight-image").attr('src');
   },
 
   imageLoaded: function() {
@@ -68,6 +86,13 @@ var WangView = Backbone.View.extend({
     this.sourceCanvas.attr('height', this.sourceHeight);
 
     this.sourceContext.drawImage(this.sourceImage, 0, 0);
+  },
+
+  weightImageLoaded: function() {
+    this.weightCanvas.attr('width', this.weightImage.width);
+    this.weightCanvas.attr('height', this.weightImage.height);
+    this.weightContext.drawImage(this.weightImage, 0, 0);
+    this.weightData = this.weightContext.getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
   },
 
   handleMouseDown: function(event) {
@@ -148,7 +173,7 @@ var WangView = Backbone.View.extend({
     this.scratchContext.drawImage(this.sourceImage, rect.x, rect.y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
     var subSampleData = new PixelData(this.scratchContext.getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE));
     var diamondTileData = new PixelData(this[tile + 'DiamondTileContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE));
-    
+
     return subSampleData.imageDiff(diamondTileData);
   },
 
@@ -194,11 +219,15 @@ var WangView = Backbone.View.extend({
       var diamondTileData = this[tile + 'DiamondTileContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
       var subSampleData = this[tile + 'SubSampleContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
       var wangTile = new ImageGraph(diamondTileData, subSampleData);
-      wangTile.initWangTile();
       wangTile.computeGraft();
       // console.debug(wangTile.maxFlow);
       wangTile.drawWangTile(this[tile + 'WangTileContext']);
-      wangTile.drawPath(this[tile + 'SubSampleContext']);
+      wangTile.drawPath(this[tile + 'CuttingPathContext']);
+      wangTile.drawXWeight(this[tile + 'XWeightContext']);
+      wangTile.drawYWeight(this[tile + 'YWeightContext']);
+      wangTile.drawDiff(this[tile + 'ImageDiffContext']);
+      wangTile.drawXGradientSum(this[tile + 'XGradientContext']);
+      wangTile.drawYGradientSum(this[tile + 'YGradientContext']);
     }
 
     this.drawTiles(this.targetContext, this.targetCanvas.attr('width'), this.targetCanvas.attr('height'));
@@ -255,6 +284,7 @@ var WangView = Backbone.View.extend({
 
       // Draw sub-samples to their own canvases for later use
       this[coloring + 'SubSampleContext'].drawImage(this.sourceImage, x, y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
+      this[coloring + 'CuttingPathContext'].drawImage(this.sourceImage, x, y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
     }
   },
 

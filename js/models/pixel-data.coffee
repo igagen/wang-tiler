@@ -53,11 +53,12 @@ class PixelData
 
   setColor: (x, y, c) ->
     i = (y * @width + x) * 4
+    alpha = (if c.length == 4 then c[3] else 255)
 
     @rawImageData.data[i] = c[0];
     @rawImageData.data[i + 1] = c[1];
     @rawImageData.data[i + 2] = c[2]; 
-    @rawImageData.data[i + 3] = c[3];
+    @rawImageData.data[i + 3] = alpha;
 
   labColor: (x, y) ->
     @initLabColor() unless @labColorData?

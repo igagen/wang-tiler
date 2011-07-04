@@ -30,7 +30,7 @@
     Graph.prototype.SOURCE = "source";
     Graph.prototype.SINK = "sink";
     Graph.prototype.ROUNDING_TOLERANCE = 0.001;
-    Graph.prototype.TERMINAL_WEIGHT_MULT = 5;
+    Graph.prototype.TERMINAL_WEIGHT_MULT = 10;
     Graph.prototype.TERMINAL_MULT_DECAY = 0.8;
     Graph.prototype.WEIGHT_TERMINAL_EDGES = true;
     Graph.prototype.SIMPLE_WEIGHT_CALC = false;
@@ -300,9 +300,6 @@
           minCapacity = capacity;
         }
       }
-      if (minCapacity === Infinity) {
-        throw new Error("Infinite capacity path");
-      }
       if (minCapacity <= 0) {
         throw new Error("No residual capacity in this path");
       }
@@ -466,19 +463,26 @@
   })();
   ImageGraph = (function() {
     __extends(ImageGraph, Graph);
-    function ImageGraph(imageData1, imageData2) {
-      var leftNode, node, topNode, weight, x, y, _ref, _ref2;
+    function ImageGraph(imageData1, imageData2, weightData) {
+      var i, leftNode, node, topNode, totalWeight, weight, x, y, _ref, _ref2, _ref3, _ref4, _ref5;
+      if (weightData == null) {
+        weightData = null;
+      }
       ImageGraph.__super__.constructor.call(this);
       if (imageData1.width !== imageData2.width || imageData1.height !== imageData2.height) {
         throw "Image dimensions don't match";
       }
       this.imageData1 = new PixelData(imageData1);
       this.imageData2 = new PixelData(imageData2);
+      if (weightData != null) {
+        this.weightData = new PixelData(weightData);
+      }
       this.width = this.imageData1.width;
       this.height = this.imageData1.height;
       this.edgeMult = 4;
       this.edgeMultDecay = 0.8;
       this.fullGraph = true;
+      totalWeight = 0;
       for (y = 0, _ref = this.height; 0 <= _ref ? y < _ref : y > _ref; 0 <= _ref ? y++ : y--) {
         for (x = 0, _ref2 = this.width; 0 <= _ref2 ? x < _ref2 : x > _ref2; 0 <= _ref2 ? x++ : x--) {
           node = this.addNode({
@@ -488,16 +492,34 @@
           if (x > 0) {
             leftNode = this.getNode(x - 1, y);
             weight = this.weight(x - 1, y, x, y);
+            totalWeight += weight;
             this.addEdge(leftNode, node, weight);
             this.addEdge(node, leftNode, weight);
           }
           if (y > 0) {
             topNode = this.getNode(x, y - 1);
             weight = this.weight(x, y - 1, x, y);
+            totalWeight += weight;
             this.addEdge(node, topNode, weight);
             this.addEdge(topNode, node, weight);
+            if (this.width !== this.height || this.width % 2 !== 0) {
+              throw "Wang tiles must be square with even width and height";
+            }
           }
         }
+      }
+      this.meanWeight = totalWeight / (2 * this.numNodes);
+      for (x = 0, _ref3 = this.width; 0 <= _ref3 ? x < _ref3 : x > _ref3; 0 <= _ref3 ? x++ : x--) {
+        this.setMultiSource(this.getNode(x, 0));
+        this.setMultiSource(this.getNode(x, this.height - 1));
+      }
+      for (y = 1, _ref4 = this.height - 1; 1 <= _ref4 ? y < _ref4 : y > _ref4; 1 <= _ref4 ? y++ : y--) {
+        this.setMultiSource(this.getNode(0, y));
+        this.setMultiSource(this.getNode(this.width - 1, y));
+      }
+      for (i = 1, _ref5 = this.width - 1; 1 <= _ref5 ? i < _ref5 : i > _ref5; 1 <= _ref5 ? i++ : i--) {
+        this.setMultiSink(this.getNode(i, i));
+        this.setMultiSink(this.getNode(i, this.height - 1 - i));
       }
     }
     ImageGraph.prototype.getNode = function(x, y) {
@@ -507,7 +529,11 @@
       return this.edges[py * this.width + px][qy * this.width + qx];
     };
     ImageGraph.prototype.weight = function(sx, sy, tx, ty) {
-      var diff, dx, dy, gs1, gs2, gt1, gt2, s1, s2, t1, t2;
+      var diff, dx, dy, gs1, gs2, gt1, gt2, mult, s1, s2, sw, t1, t2;
+      if (this.weightData) {
+        sw = this.weightData.color(sx, sy)[0] / 255;
+        return 0.1 + sw;
+      }
       s1 = this.imageData1.labColor(sx, sy);
       s2 = this.imageData2.labColor(sx, sy);
       t1 = this.imageData1.labColor(tx, ty);
@@ -522,7 +548,14 @@
       gs2 = ImageUtil.magnitude(this.imageData2.gradient(sx, sy, dx, dy));
       gt1 = ImageUtil.magnitude(this.imageData1.gradient(tx, ty, dx, dy));
       gt2 = ImageUtil.magnitude(this.imageData2.gradient(tx, ty, dx, dy));
-      return diff / (gs1 + gs2 + gt1 + gt2);
+      mult = 1;
+      if (sx === 0 || tx === 0 || sx === (this.width - 1) || tx === (this.width - 1) || sy === 0 || ty === 0 || sy === (this.height - 1) || ty === (this.height - 1)) {
+        mult = this.TERMINAL_WEIGHT_MULT;
+      }
+      if (sx === sy || tx === ty || sx === (this.height - 1 - sy) || tx === (this.height - 1 - ty)) {
+        mult = this.TERMINAL_WEIGHT_MULT;
+      }
+      return mult * diff / (gs1 + gs2 + gt1 + gt2);
     };
     ImageGraph.prototype.colorDifference = function(sx, sy, tx, ty) {
       var s1, s2, t1, t2;
@@ -531,51 +564,6 @@
       t1 = this.imageData1.labColor(tx, ty);
       t2 = this.imageData2.labColor(tx, ty);
       return ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2);
-    };
-    ImageGraph.prototype.initWangTile = function() {
-      var i, x, y, _ref, _ref2, _ref3, _results;
-      if (this.width !== this.height || this.width % 2 !== 0) {
-        throw "Wang tiles must be square with even width and height";
-      }
-      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
-        this.setMultiSource(this.getNode(x, 0));
-        this.setMultiSource(this.getNode(x, this.height - 1));
-      }
-      for (y = 1, _ref2 = this.height - 1; 1 <= _ref2 ? y < _ref2 : y > _ref2; 1 <= _ref2 ? y++ : y--) {
-        this.setMultiSource(this.getNode(0, y));
-        this.setMultiSource(this.getNode(this.width - 1, y));
-      }
-      _results = [];
-      for (i = 1, _ref3 = this.width - 1; 1 <= _ref3 ? i < _ref3 : i > _ref3; 1 <= _ref3 ? i++ : i--) {
-        this.setMultiSink(this.getNode(i, i));
-        _results.push(this.setMultiSink(this.getNode(i, this.height - 1 - i)));
-      }
-      return _results;
-    };
-    ImageGraph.prototype.weightTerminalEdges = function() {
-      var capacity, mult, p, q, x, y, _ref, _results;
-      _results = [];
-      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
-        _results.push((function() {
-          var _ref2, _results2;
-          _results2 = [];
-          for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
-            p = this.getNode(x, y);
-            _results2.push((function() {
-              var _i, _len, _ref3, _results3;
-              _ref3 = this.outgoingNeighbors(p);
-              _results3 = [];
-              for (_i = 0, _len = _ref3.length; _i < _len; _i++) {
-                q = _ref3[_i];
-                _results3.push(!this.isTerminal(q) ? (mult = this.getWeightMult(x, y), capacity = this.edges[p.id][q.id].capacity * mult, this.setCapacity(p, q, capacity)) : void 0);
-              }
-              return _results3;
-            }).call(this));
-          }
-          return _results2;
-        }).call(this));
-      }
-      return _results;
     };
     ImageGraph.prototype.terminalDistance = function(x, y) {
       var sinkDist, sourceDist;
@@ -632,6 +620,93 @@
         x = node.val.x;
         y = node.val.y;
         imageData.setColor(x, y, this.imageData2.color(x, y));
+      }
+      return context.putImageData(rawImageData, 0, 0);
+    };
+    ImageGraph.prototype.drawXWeight = function(context) {
+      var imageData, maxWeight, rawImageData, weight, x, y, _ref, _ref2;
+      rawImageData = context.createImageData(this.width, this.height);
+      imageData = new PixelData(rawImageData);
+      maxWeight = this.meanWeight * 2;
+      for (x = 0, _ref = this.width - 1; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
+        for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
+          weight = Math.min(this.weight(x, y, x + 1, y) / maxWeight, 1);
+          imageData.setColor(x, y, [weight * 255, weight * 255, weight * 255, 255]);
+        }
+      }
+      return context.putImageData(rawImageData, 0, 0);
+    };
+    ImageGraph.prototype.drawYWeight = function(context) {
+      var imageData, maxWeight, rawImageData, weight, x, y, _ref, _ref2;
+      rawImageData = context.createImageData(this.width, this.height);
+      imageData = new PixelData(rawImageData);
+      maxWeight = this.meanWeight * 2;
+      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
+        for (y = 0, _ref2 = this.height - 1; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
+          weight = Math.min(this.weight(x, y, x, y + 1) / maxWeight, 1);
+          imageData.setColor(x, y, [weight * 255, weight * 255, weight * 255, 255]);
+        }
+      }
+      return context.putImageData(rawImageData, 0, 0);
+    };
+    ImageGraph.prototype.drawDiff = function(context) {
+      var c1, c2, diff, imageData, maxDiff, rawImageData, x, y, _ref, _ref2;
+      rawImageData = context.createImageData(this.width, this.height);
+      imageData = new PixelData(rawImageData);
+      maxDiff = ImageUtil.colorDifference([100, 127, 127], [0, -128, -128]);
+      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
+        for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
+          c1 = this.imageData1.labColor(x, y);
+          c2 = this.imageData2.labColor(x, y);
+          diff = ImageUtil.colorDifference(c1, c2) / maxDiff;
+          imageData.setColor(x, y, [diff * 255, diff * 255, diff * 255, 255]);
+        }
+      }
+      return context.putImageData(rawImageData, 0, 0);
+    };
+    ImageGraph.prototype.drawXGradientSum = function(context) {
+      return this.drawGradientSum(context, 1, 0);
+    };
+    ImageGraph.prototype.drawYGradientSum = function(context) {
+      return this.drawGradientSum(context, 0, 1);
+    };
+    ImageGraph.prototype.drawX1Gradient = function(context) {
+      return this.drawGradient(context, this.imageData1, 1, 0);
+    };
+    ImageGraph.prototype.drawX2Gradient = function(context) {
+      return this.drawGradient(context, this.imageData2, 1, 0);
+    };
+    ImageGraph.prototype.drawY1Gradient = function(context) {
+      return this.drawGradient(context, this.imageData1, 0, 1);
+    };
+    ImageGraph.prototype.drawY2Gradient = function(context) {
+      return this.drawGradient(context, this.imageData2, 0, 1);
+    };
+    ImageGraph.prototype.drawGradient = function(context, image, dx, dy) {
+      var g, imageData, maxGrad, rawImageData, x, y, _ref, _ref2;
+      rawImageData = context.createImageData(this.width, this.height);
+      imageData = new PixelData(rawImageData);
+      maxGrad = ImageUtil.magnitude([100, -128, -128]);
+      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
+        for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
+          g = ImageUtil.magnitude(image.gradient(x, y, dx, dy)) / maxGrad;
+          imageData.setColor(x, y, [g * 255, g * 255, g * 255, 255]);
+        }
+      }
+      return context.putImageData(rawImageData, 0, 0);
+    };
+    ImageGraph.prototype.drawGradientSum = function(context, dx, dy) {
+      var g1, g2, gSum, imageData, maxGrad, rawImageData, x, y, _ref, _ref2;
+      rawImageData = context.createImageData(this.width, this.height);
+      imageData = new PixelData(rawImageData);
+      maxGrad = ImageUtil.magnitude([100, -128, -128]);
+      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
+        for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
+          g1 = ImageUtil.magnitude(this.imageData1.gradient(x, y, dx, dy)) / maxGrad;
+          g2 = ImageUtil.magnitude(this.imageData1.gradient(x, y, dx, dy)) / maxGrad;
+          gSum = (g1 + g2) / 2;
+          imageData.setColor(x, y, [gSum * 255, gSum * 255, gSum * 255, 255]);
+        }
       }
       return context.putImageData(rawImageData, 0, 0);
     };

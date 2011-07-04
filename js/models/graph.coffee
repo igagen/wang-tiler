@@ -14,7 +14,7 @@ class Graph
   SOURCE: "source"
   SINK: "sink"
   ROUNDING_TOLERANCE: 0.001
-  TERMINAL_WEIGHT_MULT: 5
+  TERMINAL_WEIGHT_MULT: 10
   TERMINAL_MULT_DECAY: 0.8
   WEIGHT_TERMINAL_EDGES: true
   SIMPLE_WEIGHT_CALC: false
@@ -207,7 +207,7 @@ class Graph
       capacity = @residualCapacity p, q
       minCapacity = capacity if capacity < minCapacity
 
-    throw new Error "Infinite capacity path" if minCapacity == Infinity
+    # throw new Error "Infinite capacity path" if minCapacity == Infinity
     throw new Error "No residual capacity in this path" if minCapacity <= 0
 
     minCapacity
@@ -319,7 +319,7 @@ class Graph
 # A min-cut of the flow network can be used to graft the two images while
 # minimizing the appearance of seams.
 class ImageGraph extends Graph
-  constructor: (imageData1, imageData2) ->
+  constructor: (imageData1, imageData2, weightData = null) ->
     super()
 
     if imageData1.width != imageData2.width || imageData1.height != imageData2.height
@@ -327,6 +327,7 @@ class ImageGraph extends Graph
 
     @imageData1 = new PixelData imageData1
     @imageData2 = new PixelData imageData2
+    @weightData = new PixelData weightData if weightData?
 
     @width = @imageData1.width
     @height = @imageData1.height
@@ -334,6 +335,8 @@ class ImageGraph extends Graph
     @edgeMult = 4
     @edgeMultDecay = 0.8
     @fullGraph = true
+
+    totalWeight = 0
 
     # Initialize nodes
     for y in [0...@height]
@@ -343,51 +346,24 @@ class ImageGraph extends Graph
         if x > 0 # Left
           leftNode = @getNode x - 1, y
           weight = @weight(x - 1, y, x, y)
-
+          totalWeight += weight
           @addEdge leftNode, node, weight
           @addEdge node, leftNode, weight
 
         if y > 0 # Top
           topNode = @getNode x, y - 1
           weight = @weight(x, y - 1, x, y)
+          totalWeight += weight
           @addEdge node, topNode, weight
           @addEdge topNode, node, weight
 
-  getNode: (x, y) ->
-    @nodes[y * @height + x]
+          # Adds source and sink nodes as appropriate for solving the min-cut for a strict Wang-tile
+          # Source nodes around the borders, and sink nodes diagonally crossing thru
 
-  getEdge: (px, py, qx, qy) ->
-    @edges[py * @width + px][qy * @width + qx]
+          if @width != @height || @width % 2 != 0
+            throw "Wang tiles must be square with even width and height"
 
-  weight: (sx, sy, tx, ty) ->
-    s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
-    t1 = @imageData1.labColor(tx, ty); t2 = @imageData2.labColor(tx, ty)
-
-    diff = ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2)
-    return diff if @SIMPLE_WEIGHT_CALC
-
-    dx = tx - sx
-    dy = ty - sy
-
-    gs1 = ImageUtil.magnitude @imageData1.gradient(sx, sy, dx, dy)
-    gs2 = ImageUtil.magnitude @imageData2.gradient(sx, sy, dx, dy)
-    gt1 = ImageUtil.magnitude @imageData1.gradient(tx, ty, dx, dy)
-    gt2 = ImageUtil.magnitude @imageData2.gradient(tx, ty, dx, dy)
-
-    diff / (gs1 + gs2 + gt1 + gt2)
-
-  colorDifference: (sx, sy, tx, ty) ->
-    s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
-    t1 = @imageData1.labColor(tx, ty); t2 = @imageData2.labColor(tx, ty)
-
-    ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2)
-
-  initWangTile: ->
-    # Adds source and sink nodes as appropriate for solving the min-cut for a strict Wang-tile
-    # Source nodes around the borders, and sink nodes diagonally crossing thru
-
-    if @width != @height || @width % 2 != 0
-      throw "Wang tiles must be square with even width and height"
+    @meanWeight = totalWeight / (2 * @numNodes)
 
     # Add border source nodes
     for x in [0...@width]
@@ -403,22 +379,60 @@ class ImageGraph extends Graph
       @setMultiSink @getNode(i, i)
       @setMultiSink @getNode(i, @height - 1 - i)
 
-    # @weightTerminalEdges() if @WEIGHT_TERMINAL_EDGES
+  getNode: (x, y) ->
+    @nodes[y * @height + x]
 
-  weightTerminalEdges: ->
-    # Cutting paths too close to the sink give diamond artifacts
-    # Cutting paths too close to the source give square artifacts
-    # We weight edges that lead to nearby source or sink nodes higher to lessen these artifactss
+  getEdge: (px, py, qx, qy) ->
+    @edges[py * @width + px][qy * @width + qx]
 
-    for x in [0...@width]
-      for y in [0...@height]
-        p = @getNode x, y
-        for q in @outgoingNeighbors p
-          unless @isTerminal q
-            mult = @getWeightMult x, y
-            capacity = @edges[p.id][q.id].capacity * mult
-            @setCapacity p, q, capacity
-            # console.debug "(#{p.val.x},#{p.val.y})-(#{q.val.x},#{q.val.y}): #{@getWeightMult x, y}"
+  weight: (sx, sy, tx, ty) ->
+    if @weightData
+      sw = @weightData.color(sx, sy)[0] / 255
+      return 0.1 + sw
+
+    s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
+    t1 = @imageData1.labColor(tx, ty); t2 = @imageData2.labColor(tx, ty)
+
+    diff = ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2)
+    return diff if @SIMPLE_WEIGHT_CALC
+
+    dx = tx - sx
+    dy = ty - sy
+
+    gs1 = ImageUtil.magnitude @imageData1.gradient(sx, sy, dx, dy)
+    gs2 = ImageUtil.magnitude @imageData2.gradient(sx, sy, dx, dy)
+    gt1 = ImageUtil.magnitude @imageData1.gradient(tx, ty, dx, dy)
+    gt2 = ImageUtil.magnitude @imageData2.gradient(tx, ty, dx, dy)
+
+    mult = 1
+    if sx == 0 || tx == 0 || sx == (@width - 1) || tx == (@width - 1) || sy == 0 || ty == 0 || sy == (@height - 1) || ty == (@height - 1)
+      mult = @TERMINAL_WEIGHT_MULT
+
+    if sx == sy || tx == ty || sx == (@height - 1 - sy) || tx == (@height - 1 - ty)
+      mult = @TERMINAL_WEIGHT_MULT
+
+    mult * diff / (gs1 + gs2 + gt1 + gt2)
+
+  colorDifference: (sx, sy, tx, ty) ->
+    s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
+    t1 = @imageData1.labColor(tx, ty); t2 = @imageData2.labColor(tx, ty)
+
+    ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2)
+
+  # weightTerminalEdges: ->
+  #   # Cutting paths too close to the sink give diamond artifacts
+  #   # Cutting paths too close to the source give square artifacts
+  #   # We weight edges that lead to nearby source or sink nodes higher to lessen these artifactss
+  # 
+  #   for x in [0...@width]
+  #     for y in [0...@height]
+  #       p = @getNode x, y
+  #       for q in @outgoingNeighbors p
+  #         unless @isTerminal q
+  #           mult = @getWeightMult x, y
+  #           capacity = @edges[p.id][q.id].capacity * mult
+  #           @setCapacity p, q, capacity
+  #           # console.debug "(#{p.val.x},#{p.val.y})-(#{q.val.x},#{q.val.y}): #{@getWeightMult x, y}"
 
   terminalDistance: (x, y) ->
     # Returns the distance to the nearest source or sink
@@ -467,6 +481,80 @@ class ImageGraph extends Graph
       x = node.val.x
       y = node.val.y
       imageData.setColor(x, y, @imageData2.color(x, y))
+
+    context.putImageData rawImageData, 0, 0
+
+  drawXWeight: (context) ->
+    rawImageData = context.createImageData @width, @height
+    imageData = new PixelData rawImageData
+
+    maxWeight = @meanWeight * 2
+    for x in [0...@width - 1]
+      for y in [0...@height]
+        weight = Math.min(@weight(x, y, x + 1, y) / maxWeight, 1)
+        imageData.setColor x, y, [weight * 255, weight * 255, weight * 255, 255]
+
+    context.putImageData rawImageData, 0, 0
+
+  drawYWeight: (context) ->
+    rawImageData = context.createImageData @width, @height
+    imageData = new PixelData rawImageData
+
+    maxWeight = @meanWeight * 2
+    for x in [0...@width]
+      for y in [0...@height - 1]
+        weight = Math.min(@weight(x, y, x, y + 1) / maxWeight, 1)
+        imageData.setColor x, y, [weight * 255, weight * 255, weight * 255, 255]
+
+    context.putImageData rawImageData, 0, 0
+
+  drawDiff: (context) ->
+    rawImageData = context.createImageData @width, @height
+    imageData = new PixelData rawImageData
+
+    maxDiff = ImageUtil.colorDifference [100, 127, 127], [0, -128, -128]
+
+    for x in [0...@width]
+      for y in [0...@height]
+        c1 = @imageData1.labColor x, y
+        c2 = @imageData2.labColor x, y
+        diff = ImageUtil.colorDifference(c1, c2) / maxDiff
+        imageData.setColor x, y, [diff * 255, diff * 255, diff * 255, 255]
+
+    context.putImageData rawImageData, 0, 0
+
+  drawXGradientSum: (context) -> @drawGradientSum context, 1, 0
+  drawYGradientSum: (context) -> @drawGradientSum context, 0, 1
+  drawX1Gradient: (context) -> @drawGradient context, @imageData1, 1, 0
+  drawX2Gradient: (context) -> @drawGradient context, @imageData2, 1, 0
+  drawY1Gradient: (context) -> @drawGradient context, @imageData1, 0, 1
+  drawY2Gradient: (context) -> @drawGradient context, @imageData2, 0, 1
+
+  drawGradient: (context, image, dx, dy) ->
+    rawImageData = context.createImageData @width, @height
+    imageData = new PixelData rawImageData
+
+    maxGrad = ImageUtil.magnitude [100, -128, -128]
+
+    for x in [0...@width]
+      for y in [0...@height]
+        g = ImageUtil.magnitude(image.gradient(x, y, dx, dy)) / maxGrad
+        imageData.setColor x, y, [g * 255, g * 255, g * 255, 255]
+
+    context.putImageData rawImageData, 0, 0
+
+  drawGradientSum: (context, dx, dy) ->
+    rawImageData = context.createImageData @width, @height
+    imageData = new PixelData rawImageData
+
+    maxGrad = ImageUtil.magnitude [100, -128, -128]
+
+    for x in [0...@width]
+      for y in [0...@height]
+        g1 = ImageUtil.magnitude(@imageData1.gradient(x, y, dx, dy)) / maxGrad
+        g2 = ImageUtil.magnitude(@imageData1.gradient(x, y, dx, dy)) / maxGrad
+        gSum = (g1 + g2) / 2
+        imageData.setColor x, y, [gSum * 255, gSum * 255, gSum * 255, 255]
 
     context.putImageData rawImageData, 0, 0
 

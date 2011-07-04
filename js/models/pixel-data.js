@@ -92,12 +92,13 @@
       return [this.rawImageData.data[i], this.rawImageData.data[i + 1], this.rawImageData.data[i + 2], this.rawImageData.data[i + 3]];
     };
     PixelData.prototype.setColor = function(x, y, c) {
-      var i;
+      var alpha, i;
       i = (y * this.width + x) * 4;
+      alpha = (c.length === 4 ? c[3] : 255);
       this.rawImageData.data[i] = c[0];
       this.rawImageData.data[i + 1] = c[1];
       this.rawImageData.data[i + 2] = c[2];
-      return this.rawImageData.data[i + 3] = c[3];
+      return this.rawImageData.data[i + 3] = alpha;
     };
     PixelData.prototype.labColor = function(x, y) {
       if (this.labColorData == null) {

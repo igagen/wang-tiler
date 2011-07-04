@@ -5,7 +5,7 @@ body {
   color: white;
 }
 
-#source-image {
+#source-image, #weight-image {
   display: none;
 }
 
@@ -14,8 +14,22 @@ canvas {
   margin: 10px;
 }
 
-#scratch-canvas {
+#scratch-canvas, #weight-canvas {
   display: none;
+}
+
+#target-canvas {
+  margin-left: 75px;
+}
+
+div {
+  position: relative;
+}
+
+span {
+  position: absolute;
+  top: 30px;
+  padding-left: 10px;
 }
 
 .rygb {
