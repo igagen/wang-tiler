@@ -108,13 +108,15 @@ class PixelData
 
   imageDiff: (imageData) ->
     return Infinity if @width != imageData.width || @height != imageData.height
+    @regionDiff imageData, 0, 0, @width, @height
 
-    diff = 0
-    for x in [0...@width]
-      for y in [0...@height]
-        diff += ImageUtil.colorDifference(@labColor(x, y), imageData.labColor(x, y))
+  regionDiff: (imageData, x, y, w, h) ->
+    diffSum = 0
+    for rx in [x...x + w]
+      for ry in [y...y + h]
+        diffSum += ImageUtil.colorDifference(@labColor(x, y), imageData.labColor(x, y))
 
-    diff / (@width * @height)
+    diffSum / (w * h)
 
 window.ImageUtil = ImageUtil
 window.PixelData = PixelData

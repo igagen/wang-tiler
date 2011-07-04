@@ -3,8 +3,8 @@
 
 class WangTile extends ImageGraph
   ROUNDING_TOLERANCE: 0.001
-  TERMINAL_WEIGHT_MULT: 10
-  TERMINAL_MULT_DECAY: 0.8
+  TERMINAL_WEIGHT_MULT: 5
+  TERMINAL_MULT_DECAY: 0.6
   WEIGHT_TERMINAL_EDGES: true
   ADD_DIAGONAL_EDGES: true
   SIMPLE_WEIGHT_CALC: false
@@ -15,34 +15,47 @@ class WangTile extends ImageGraph
     if @width != @height || @width % 2 != 0
       throw "Wang tiles must be square with even width and height"
 
-    @edgeMult = 4
-    @edgeMultDecay = 0.8
-    @fullGraph = true
+    @size = @width
+
+    maxRegionDiff = 0
+    regionSize = Math.floor(@size / 4)
+    base = @size - regionSize - 1
+
+    topLeftDiff = @imageData1.regionDiff @imageData2, 0, 0, regionSize, regionSize
+    topRightDiff = @imageData1.regionDiff @imageData2, base, 0, regionSize, regionSize
+    bottomRightDiff = @imageData1.regionDiff @imageData2, base, base, regionSize, regionSize
+    bottomLeftDiff = @imageData1.regionDiff @imageData2, 0, 0, regionSize, regionSize
+
+    @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff
+    console.debug "Region diff: #{@maxRegionDiff} - (#{topLeftDiff}, #{topRightDiff}, #{bottomRightDiff}, #{bottomLeftDiff})"
+
     @weightData = new PixelData(weightData) if weightData?
 
-    totalWeight = 0
-    @diffSum = 0
+    weightSum = 0
+    diffSum = 0
 
     # Initialize nodes
     for y in [0...@height]
       for x in [0...@width]
         node = @getNode x, y
 
-        @diffSum += ImageUtil.magnitude(ImageUtil.colorDifference(@imageData1.color(x, y), @imageData2.color(x, y)))
+        diffSum += ImageUtil.colorDifference(@imageData1.color(x, y), @imageData2.color(x, y))
 
         if x > 0 # Left
           leftNode = @getNode x - 1, y
           weight = @weight(x - 1, y, x, y)
-          totalWeight += weight
+          weightSum += weight
           @addEdge leftNode, node, weight
           @addEdge node, leftNode, weight
 
         if y > 0 # Top
           topNode = @getNode x, y - 1
           weight = @weight(x, y - 1, x, y)
-          totalWeight += weight
+          weightSum += weight
           @addEdge node, topNode, weight
           @addEdge topNode, node, weight
+
+    @avgDiff = diffSum / @numNodes
 
     # Add diagonal edges, the weight for these edges is the
     # minimum of the hypotenuses of the two different non-diagonal straight routes
@@ -84,7 +97,7 @@ class WangTile extends ImageGraph
     # Adds source and sink nodes as appropriate for solving the min-cut for a strict Wang-tile
     # Source nodes around the borders, and sink nodes diagonally crossing thru
 
-    @meanWeight = totalWeight / (2 * @numNodes)
+    @meanWeight = weightSum / (2 * @numNodes)
 
     # Add border source nodes
     for x in [0...@width]

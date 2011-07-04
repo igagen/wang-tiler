@@ -143,17 +143,20 @@
       return convolution;
     };
     PixelData.prototype.imageDiff = function(imageData) {
-      var diff, x, y, _ref, _ref2;
       if (this.width !== imageData.width || this.height !== imageData.height) {
         return Infinity;
       }
-      diff = 0;
-      for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
-        for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
-          diff += ImageUtil.colorDifference(this.labColor(x, y), imageData.labColor(x, y));
+      return this.regionDiff(imageData, 0, 0, this.width, this.height);
+    };
+    PixelData.prototype.regionDiff = function(imageData, x, y, w, h) {
+      var diffSum, rx, ry, _ref, _ref2;
+      diffSum = 0;
+      for (rx = x, _ref = x + w; x <= _ref ? rx < _ref : rx > _ref; x <= _ref ? rx++ : rx--) {
+        for (ry = y, _ref2 = y + h; y <= _ref2 ? ry < _ref2 : ry > _ref2; y <= _ref2 ? ry++ : ry--) {
+          diffSum += ImageUtil.colorDifference(this.labColor(x, y), imageData.labColor(x, y));
         }
       }
-      return diff / (this.width * this.height);
+      return diffSum / (w * h);
     };
     return PixelData;
   })();

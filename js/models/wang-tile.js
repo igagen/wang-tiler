@@ -11,13 +11,13 @@
   WangTile = (function() {
     __extends(WangTile, ImageGraph);
     WangTile.prototype.ROUNDING_TOLERANCE = 0.001;
-    WangTile.prototype.TERMINAL_WEIGHT_MULT = 10;
-    WangTile.prototype.TERMINAL_MULT_DECAY = 0.8;
+    WangTile.prototype.TERMINAL_WEIGHT_MULT = 5;
+    WangTile.prototype.TERMINAL_MULT_DECAY = 0.6;
     WangTile.prototype.WEIGHT_TERMINAL_EDGES = true;
     WangTile.prototype.ADD_DIAGONAL_EDGES = true;
     WangTile.prototype.SIMPLE_WEIGHT_CALC = false;
     function WangTile(imageData1, imageData2, weightData) {
-      var i, l, l2ulw, leftNode, luh, lw, n, node, r, r2urw, ruh, rw, topNode, totalWeight, u, u2ulw, u2urw, ul, ulh, ur, urh, uw, weight, x, y, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7;
+      var base, bottomLeftDiff, bottomRightDiff, diffSum, i, l, l2ulw, leftNode, luh, lw, maxRegionDiff, n, node, r, r2urw, regionSize, ruh, rw, topLeftDiff, topNode, topRightDiff, u, u2ulw, u2urw, ul, ulh, ur, urh, uw, weight, weightSum, x, y, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7;
       if (weightData == null) {
         weightData = null;
       }
@@ -25,35 +25,42 @@
       if (this.width !== this.height || this.width % 2 !== 0) {
         throw "Wang tiles must be square with even width and height";
       }
-      this.edgeMult = 4;
-      this.edgeMultDecay = 0.8;
-      this.fullGraph = true;
+      this.size = this.width;
+      maxRegionDiff = 0;
+      regionSize = Math.floor(this.size / 4);
+      base = this.size - regionSize - 1;
+      topLeftDiff = this.imageData1.regionDiff(this.imageData2, 0, 0, regionSize, regionSize);
+      topRightDiff = this.imageData1.regionDiff(this.imageData2, base, 0, regionSize, regionSize);
+      bottomRightDiff = this.imageData1.regionDiff(this.imageData2, base, base, regionSize, regionSize);
+      bottomLeftDiff = this.imageData1.regionDiff(this.imageData2, 0, 0, regionSize, regionSize);
+      this.maxRegionDiff = Math.max(topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff);
+      console.debug("Region diff: " + this.maxRegionDiff + " - (" + topLeftDiff + ", " + topRightDiff + ", " + bottomRightDiff + ", " + bottomLeftDiff + ")");
       if (weightData != null) {
         this.weightData = new PixelData(weightData);
       }
-      totalWeight = 0;
-      this.diffSum = 0;
+      weightSum = 0;
+      diffSum = 0;
       for (y = 0, _ref = this.height; 0 <= _ref ? y < _ref : y > _ref; 0 <= _ref ? y++ : y--) {
         for (x = 0, _ref2 = this.width; 0 <= _ref2 ? x < _ref2 : x > _ref2; 0 <= _ref2 ? x++ : x--) {
           node = this.getNode(x, y);
-          debugger;
-          this.diffSum += ImageUtil.magnitude(ImageUtil.colorDifference(this.imageData1.color(x, y), this.imageData2.color(x, y)));
+          diffSum += ImageUtil.colorDifference(this.imageData1.color(x, y), this.imageData2.color(x, y));
           if (x > 0) {
             leftNode = this.getNode(x - 1, y);
             weight = this.weight(x - 1, y, x, y);
-            totalWeight += weight;
+            weightSum += weight;
             this.addEdge(leftNode, node, weight);
             this.addEdge(node, leftNode, weight);
           }
           if (y > 0) {
             topNode = this.getNode(x, y - 1);
             weight = this.weight(x, y - 1, x, y);
-            totalWeight += weight;
+            weightSum += weight;
             this.addEdge(node, topNode, weight);
             this.addEdge(topNode, node, weight);
           }
         }
       }
+      this.avgDiff = diffSum / this.numNodes;
       if (this.ADD_DIAGONAL_EDGES) {
         for (x = 0, _ref3 = this.width; 0 <= _ref3 ? x < _ref3 : x > _ref3; 0 <= _ref3 ? x++ : x--) {
           for (y = 1, _ref4 = this.height; 1 <= _ref4 ? y < _ref4 : y > _ref4; 1 <= _ref4 ? y++ : y--) {
@@ -87,7 +94,7 @@
           }
         }
       }
-      this.meanWeight = totalWeight / (2 * this.numNodes);
+      this.meanWeight = weightSum / (2 * this.numNodes);
       for (x = 0, _ref5 = this.width; 0 <= _ref5 ? x < _ref5 : x > _ref5; 0 <= _ref5 ? x++ : x--) {
         this.setMultiSource(this.getNode(x, 0));
         this.setMultiSource(this.getNode(x, this.height - 1));

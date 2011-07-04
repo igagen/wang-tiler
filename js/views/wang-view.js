@@ -219,7 +219,6 @@ var WangView = Backbone.View.extend({
       var diamondTileData = this[tile + 'DiamondTileContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
       var subSampleData = this[tile + 'SubSampleContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
       var wangTile = new WangTile(diamondTileData, subSampleData);
-      console.debug(wangTile.diffSum);
       wangTile.computeGraft();
       // console.debug(wangTile.maxFlow);
       wangTile.drawWangTile(this[tile + 'WangTileContext']);
