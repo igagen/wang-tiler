@@ -3,11 +3,10 @@
 
 class WangTile extends ImageGraph
   ROUNDING_TOLERANCE: 0.001
-  TERMINAL_WEIGHT_MULT: 4
+  TERMINAL_WEIGHT_MULT: 2
   TERMINAL_WEIGHT_DECAY: 0.5
   ADD_DIAGONAL_EDGES: true
-  SIMPLE_WEIGHT_CALC: true
-  REGION_DIFF_CORNERS_ONLY: true
+  SIMPLE_WEIGHT_CALC: false
 
   constructor: (imageData1, imageData2, weightData = null) ->
     super(imageData1, imageData2)
@@ -19,7 +18,7 @@ class WangTile extends ImageGraph
 
   init: ->
     maxRegionDiff = 0
-    regionSize = Math.floor(@size / 4)
+    regionSize = Math.floor(@size / 8)
     base = @size - regionSize - 1
 
     # Corners
@@ -28,18 +27,17 @@ class WangTile extends ImageGraph
     bottomRightDiff = @imageData1.regionDiff @imageData2, base, base, regionSize, regionSize
     bottomLeftDiff = @imageData1.regionDiff @imageData2, 0, 0, regionSize, regionSize
 
+    @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff
+
     # Edges
-    if !@REGION_DIFF_CORNERS_ONLY
-      topDiff = @imageData1.regionDiff @imageData2, regionSize, 0, 2 * regionSize, regionSize
-      rightDiff = @imageData1.regionDiff @imageData2, base, regionSize, regionSize, 2 * regionSize
-      bottomDiff = @imageData1.regionDiff @imageData2, regionSize, base, 2 * regionSize, regionSize
-      leftDiff = @imageData1.regionDiff @imageData2, 0, regionSize, regionSize, 2 * regionSize
+    # topDiff = @imageData1.regionDiff @imageData2, regionSize, 0, 2 * regionSize, regionSize
+    # rightDiff = @imageData1.regionDiff @imageData2, base, regionSize, regionSize, 2 * regionSize
+    # bottomDiff = @imageData1.regionDiff @imageData2, regionSize, base, 2 * regionSize, regionSize
+    # leftDiff = @imageData1.regionDiff @imageData2, 0, regionSize, regionSize, 2 * regionSize
+    # 
+    # @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff, topDiff, rightDiff, bottomDiff, leftDiff
 
-      @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff, topDiff, rightDiff, bottomDiff, leftDiff
-    else
-      @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff
-
-    # console.debug "Region diff: #{@maxRegionDiff} - (#{topLeftDiff}, #{topRightDiff}, #{bottomRightDiff}, #{bottomLeftDiff})"
+    
 
     @weightData = new PixelData(weightData) if weightData?
 

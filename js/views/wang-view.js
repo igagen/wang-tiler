@@ -9,8 +9,8 @@ var WangView = Backbone.View.extend({
     "mousemove canvas": "handleMouseMove"
   },
 
-  BLOCK_SIZE: 64,
-  MAX_ITERATIONS: 30,
+  BLOCK_SIZE: 80,
+  MAX_ITERATIONS: 50,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
 
@@ -132,6 +132,12 @@ var WangView = Backbone.View.extend({
       r.y = Math.floor(r.y);
       r.width = Math.floor(r.width);
       r.height = Math.floor(r.height);
+      if (r.x + r.width > this.sourceImage.width) {
+        r.width = this.sourceImage.width - r.x;
+      }
+      if (r.y + r.height > this.sourceImage.height) {
+        r.height = this.sourceImage.height - r.y;
+      }
       this.sampleRect = r;
       this.drawSampleRect(this.sampleRect);
       this.generateDiamonds();
@@ -241,8 +247,8 @@ var WangView = Backbone.View.extend({
       wangTile.drawXWeight(this[tile + 'XWeightContext']);
       wangTile.drawYWeight(this[tile + 'YWeightContext']);
       wangTile.drawDiff(this[tile + 'ImageDiffContext']);
-      wangTile.drawXGradientSum(this[tile + 'XGradientContext']);
-      wangTile.drawYGradientSum(this[tile + 'YGradientContext']);
+      wangTile.drawX1Gradient(this[tile + 'XGradientContext']);
+      wangTile.drawY1Gradient(this[tile + 'YGradientContext']);
     }
 
     this.drawTiles(this.targetContext, this.targetCanvas.attr('width'), this.targetCanvas.attr('height'));

@@ -58,5 +58,7 @@ class ImageGraph extends Graph
     gt1 = ImageUtil.magnitude @imageData1.gradient(tx, ty, dx, dy)
     gt2 = ImageUtil.magnitude @imageData2.gradient(tx, ty, dx, dy)
 
+    diff / (gs1 + gs2 + gt1 + gt2)
+
 
 window.ImageGraph = ImageGraph

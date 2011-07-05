@@ -11,12 +11,10 @@
   WangTile = (function() {
     __extends(WangTile, ImageGraph);
     WangTile.prototype.ROUNDING_TOLERANCE = 0.001;
-    WangTile.prototype.TERMINAL_WEIGHT_MULT = 4;
+    WangTile.prototype.TERMINAL_WEIGHT_MULT = 2;
     WangTile.prototype.TERMINAL_WEIGHT_DECAY = 0.5;
-    WangTile.prototype.WEIGHT_TERMINAL_EDGES = true;
     WangTile.prototype.ADD_DIAGONAL_EDGES = true;
-    WangTile.prototype.SIMPLE_WEIGHT_CALC = true;
-    WangTile.prototype.REGION_DIFF_CORNERS_ONLY = true;
+    WangTile.prototype.SIMPLE_WEIGHT_CALC = false;
     function WangTile(imageData1, imageData2, weightData) {
       if (weightData == null) {
         weightData = null;
@@ -28,23 +26,15 @@
       this.size = this.width;
     }
     WangTile.prototype.init = function() {
-      var base, bottomDiff, bottomLeftDiff, bottomRightDiff, diffSum, i, l, l2ulw, leftDiff, leftNode, luh, lw, maxRegionDiff, n, node, r, r2urw, regionSize, rightDiff, ruh, rw, topDiff, topLeftDiff, topNode, topRightDiff, u, u2ulw, u2urw, ul, ulh, ur, urh, uw, weight, weightSum, x, y, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _results;
+      var base, bottomLeftDiff, bottomRightDiff, diffSum, i, l, l2ulw, leftNode, luh, lw, maxRegionDiff, n, node, r, r2urw, regionSize, ruh, rw, topLeftDiff, topNode, topRightDiff, u, u2ulw, u2urw, ul, ulh, ur, urh, uw, weight, weightSum, x, y, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _results;
       maxRegionDiff = 0;
-      regionSize = Math.floor(this.size / 4);
+      regionSize = Math.floor(this.size / 8);
       base = this.size - regionSize - 1;
       topLeftDiff = this.imageData1.regionDiff(this.imageData2, 0, 0, regionSize, regionSize);
       topRightDiff = this.imageData1.regionDiff(this.imageData2, base, 0, regionSize, regionSize);
       bottomRightDiff = this.imageData1.regionDiff(this.imageData2, base, base, regionSize, regionSize);
       bottomLeftDiff = this.imageData1.regionDiff(this.imageData2, 0, 0, regionSize, regionSize);
-      if (!this.REGION_DIFF_CORNERS_ONLY) {
-        topDiff = this.imageData1.regionDiff(this.imageData2, regionSize, 0, 2 * regionSize, regionSize);
-        rightDiff = this.imageData1.regionDiff(this.imageData2, base, regionSize, regionSize, 2 * regionSize);
-        bottomDiff = this.imageData1.regionDiff(this.imageData2, regionSize, base, 2 * regionSize, regionSize);
-        leftDiff = this.imageData1.regionDiff(this.imageData2, 0, regionSize, regionSize, 2 * regionSize);
-        this.maxRegionDiff = Math.max(topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff, topDiff, rightDiff, bottomDiff, leftDiff);
-      } else {
-        this.maxRegionDiff = Math.max(topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff);
-      }
+      this.maxRegionDiff = Math.max(topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff);
       if (typeof weightData !== "undefined" && weightData !== null) {
         this.weightData = new PixelData(weightData);
       }

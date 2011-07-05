@@ -72,7 +72,8 @@
       gs1 = ImageUtil.magnitude(this.imageData1.gradient(sx, sy, dx, dy));
       gs2 = ImageUtil.magnitude(this.imageData2.gradient(sx, sy, dx, dy));
       gt1 = ImageUtil.magnitude(this.imageData1.gradient(tx, ty, dx, dy));
-      return gt2 = ImageUtil.magnitude(this.imageData2.gradient(tx, ty, dx, dy));
+      gt2 = ImageUtil.magnitude(this.imageData2.gradient(tx, ty, dx, dy));
+      return diff / (gs1 + gs2 + gt1 + gt2);
     };
     return ImageGraph;
   })();

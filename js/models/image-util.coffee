@@ -67,21 +67,14 @@ class PixelData
 
   gradient: (x, y, dx, dy) ->
     if dx == -1 && dy == 0
-      kernel = [[1, 0, -1],
-                [2, 0, -2],
-                [1, 0, -1]]
+      kernel = [[1, 2, 1], [0, 0, 0], [-1, -2, -1]]
     else if dx == 1 && dy == 0
-      kernel = [[-1, 0, 1],
-                [-2, 0, 2],
-                [-1, 0, 1]]
+      kernel = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]
     else if dx == 0 && dy == -1
-      kernel = [[1, 2, 1],
-                [0, 0, 0],
-                [-1, -2, -1]]
+      kernel = [[1, 0, -1], [2, 0, -2], [1, 0, -1]]
     else if dx == 0 && dy == 1
-      kernel = [[-1, -2, -1],
-                [0, 0, 0],
-                [1, 2, 1]]
+      kernel = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]
+
     else
       throw new Error "Invalid dx/dy for call to gradient"
 
