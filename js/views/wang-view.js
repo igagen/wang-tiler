@@ -9,7 +9,8 @@ var WangView = Backbone.View.extend({
     "mousemove canvas": "handleMouseMove"
   },
 
-  BLOCK_SIZE: 80,
+  BLOCK_SIZE: 96,
+  TARGET_SIZE: 6,
   MAX_ITERATIONS: 50,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
@@ -62,7 +63,7 @@ var WangView = Backbone.View.extend({
       $(this).attr('height', blockSize);
     });
 
-    $("#target-canvas").attr('width', 6 * this.BLOCK_SIZE).attr('height', 6 * this.BLOCK_SIZE);
+    $("#target-canvas").attr('width', this.TARGET_SIZE * this.BLOCK_SIZE).attr('height', this.TARGET_SIZE * this.BLOCK_SIZE);
 
     this.sampling = false;
 
@@ -181,25 +182,6 @@ var WangView = Backbone.View.extend({
 
     this.diamondMap['y'] = this.yellowDiamond = this.addRandomRect(this.diamonds);
     this.drawDiamond(this.sampleRect.x + this.yellowDiamond.x, this.sampleRect.y + this.yellowDiamond.y, 'rgba(255,255,0,0.4)');
-  },
-
-  addBestRect: function(tile) {
-    var maxIterations = 50;
-    var minDiff = Infinity;
-    var bestRect;
-    for (var i = 0; i < maxIterations; i++) {
-      var r = this.getRandomRectWithoutDupCheck();
-
-      var diff = this.getSubSampleDiff(tile, r);
-      if (diff < minDiff) {
-        minDiff = diff;
-        console.debug(minDiff);
-        bestRect = r;
-      }
-    }
-
-    this.subSamples.push(bestRect);
-    return bestRect;
   },
 
   generateWangTiles: function() {
@@ -477,22 +459,68 @@ var WangView = Backbone.View.extend({
     return Math.floor(max * Math.random());
   },
 
-  matchTile: function(colors) {
+  tileMatches: function(colors) {
     var matches = [];
     for (var i = 0; i < this.TILES.length; i++) {
       var tile = this.TILES[i];
       if (tile.match(colors)) matches.push(tile);
     }
 
-    var i = this.random(matches.length);
-    return matches[i];
+    return matches;
+  },
+
+  matchTile: function(x, y, colors) {
+    var duplicates = [];
+    var duplicate;
+    var matches = this.tileMatches(colors);
+    if (x > 0) {
+      var leftTile = this.tiles[x - 1][y];
+      duplicate = this.removeColor(matches, leftTile);
+      if (duplicate) duplicates.push(duplicate);
+    }
+
+    if (y > 0) {
+      var upperTile = this.tiles[x][y - 1];
+      duplicate = this.removeColor(matches, upperTile);
+      if (duplicate) duplicates.push(duplicate);
+    }
+
+    if (x > 0 && y > 0) {
+      var upperLeftTile = this.tiles[x - 1][y - 1];
+      duplicate = this.removeColor(matches, upperLeftTile);
+      if (duplicate) duplicates.push(duplicate);
+    }
+
+    if (x < this.tiles.length - 1 && y > 0) {
+      var upperRightTile = this.tiles[x + 1][y - 1];
+      duplicate = this.removeColor(matches, upperRightTile);
+      if (duplicate) duplicates.push(duplicate);
+    }
+
+    if (matches.length) {
+      return matches[this.random(matches.length)];
+    }
+    else {
+      return duplicates[this.random(matches.length)];
+    }
+  },
+
+  removeColor: function(tiles, color) {
+    var match = tiles.indexOf(color);
+    if (match == -1) {
+      return null;
+    }
+    else {
+      return tiles.splice(match, 1)[0];
+    }
   },
 
   drawTiles: function(context, width, height) {
     var x, y, tile;
     var xTiles = width / this.BLOCK_SIZE;
     var yTiles = height / this.BLOCK_SIZE;
-    var tiles = new Array(xTiles);
+    this.tiles = new Array(xTiles);
+    var tiles = this.tiles;
     for (x = 0; x < xTiles; x++) tiles[x] = new Array(yTiles);
 
     for (x = 0; x < xTiles; x++) {
@@ -503,16 +531,18 @@ var WangView = Backbone.View.extend({
         }
         else if (x == 0) {
           // Left column, match top of this tile to bottom of above tile
-          tiles[x][y] = this.matchTile(new RegExp(tiles[x][y - 1][2] + "..."));
+          tiles[x][y] = this.matchTile(x, y, new RegExp(tiles[x][y - 1][2] + "..."));
         }
         else if (y == 0) {
           // Top row, match left
-          tiles[x][y] = this.matchTile(new RegExp("..." + tiles[x - 1][y][1]));
+          tiles[x][y] = this.matchTile(x, y, new RegExp("..." + tiles[x - 1][y][1]));
         }
         else {
           // Interior tile, match top and left
-          tiles[x][y] = this.matchTile(new RegExp(tiles[x][y - 1][2] + ".." + tiles[x - 1][y][1]));
+          tiles[x][y] = this.matchTile(x, y, new RegExp(tiles[x][y - 1][2] + ".." + tiles[x - 1][y][1]));
         }
+
+        // console.debug("tile(" + x + ", " + y + "): " + tiles[x][y]);
 
         var tileContext = this[tiles[x][y] + "WangTileContext"];
         var imageData = tileContext.getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);

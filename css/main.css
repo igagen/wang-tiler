@@ -5,6 +5,10 @@ body {
   color: white;
 }
 
+#mirror {
+  background: url(../images/gbgb.png) repeat;
+}
+
 h2 {
   margin: 0 0 10px 10px;
 }

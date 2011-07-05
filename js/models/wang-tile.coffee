@@ -3,7 +3,7 @@
 
 class WangTile extends ImageGraph
   ROUNDING_TOLERANCE: 0.001
-  TERMINAL_WEIGHT_MULT: 2
+  TERMINAL_WEIGHT_MULT: 3
   TERMINAL_WEIGHT_DECAY: 0.5
   ADD_DIAGONAL_EDGES: true
   SIMPLE_WEIGHT_CALC: false
@@ -18,7 +18,7 @@ class WangTile extends ImageGraph
 
   init: ->
     maxRegionDiff = 0
-    regionSize = Math.floor(@size / 8)
+    regionSize = Math.floor(@size / 12)
     base = @size - regionSize - 1
 
     # Corners
@@ -36,8 +36,6 @@ class WangTile extends ImageGraph
     # leftDiff = @imageData1.regionDiff @imageData2, 0, regionSize, regionSize, 2 * regionSize
     # 
     # @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff, topDiff, rightDiff, bottomDiff, leftDiff
-
-    
 
     @weightData = new PixelData(weightData) if weightData?
 
