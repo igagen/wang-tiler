@@ -11,10 +11,13 @@
   WangTile = (function() {
     __extends(WangTile, ImageGraph);
     WangTile.prototype.ROUNDING_TOLERANCE = 0.001;
-    WangTile.prototype.TERMINAL_WEIGHT_MULT = 2;
-    WangTile.prototype.TERMINAL_WEIGHT_DECAY = 0.5;
+    WangTile.prototype.WEIGHT_MULT = 1;
+    WangTile.prototype.SQUARE_WEIGHTS = false;
+    WangTile.prototype.TERMINAL_WEIGHT_MULT = 5;
+    WangTile.prototype.TERMINAL_WEIGHT_DECAY = 0.2;
     WangTile.prototype.ADD_DIAGONAL_EDGES = true;
     WangTile.prototype.SIMPLE_WEIGHT_CALC = false;
+    WangTile.prototype.CORNER_SIZE = 6;
     function WangTile(imageData1, imageData2, weightData) {
       if (weightData == null) {
         weightData = null;
@@ -26,15 +29,14 @@
       this.size = this.width;
     }
     WangTile.prototype.init = function() {
-      var base, bottomLeftDiff, bottomRightDiff, diffSum, i, l, l2ulw, leftNode, luh, lw, maxRegionDiff, n, node, r, r2urw, regionSize, ruh, rw, topLeftDiff, topNode, topRightDiff, u, u2ulw, u2urw, ul, ulh, ur, urh, uw, weight, weightSum, x, y, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _results;
-      maxRegionDiff = 0;
-      regionSize = Math.floor(this.size / 8);
-      base = this.size - regionSize - 1;
-      topLeftDiff = this.imageData1.regionDiff(this.imageData2, 0, 0, regionSize, regionSize);
-      topRightDiff = this.imageData1.regionDiff(this.imageData2, base, 0, regionSize, regionSize);
-      bottomRightDiff = this.imageData1.regionDiff(this.imageData2, base, base, regionSize, regionSize);
-      bottomLeftDiff = this.imageData1.regionDiff(this.imageData2, 0, 0, regionSize, regionSize);
-      this.maxRegionDiff = Math.max(topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff);
+      var base, bottomLeftWeight, bottomRightWeight, diffSum, i, l, l2ulw, leftNode, luh, lw, maxRegionWeight, n, node, r, r2urw, ruh, rw, topLeftWeight, topNode, topRightWeight, u, u2ulw, u2urw, ul, ulh, ur, urh, uw, weight, weightSum, x, y, _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _results;
+      maxRegionWeight = 0;
+      base = this.size - this.CORNER_SIZE - 1;
+      topLeftWeight = this.imageData1.regionWeight(this.imageData2, 0, 0, this.CORNER_SIZE, this.CORNER_SIZE);
+      topRightWeight = this.imageData1.regionWeight(this.imageData2, base, 0, this.CORNER_SIZE, this.CORNER_SIZE);
+      bottomRightWeight = this.imageData1.regionWeight(this.imageData2, base, base, this.CORNER_SIZE, this.CORNER_SIZE);
+      bottomLeftWeight = this.imageData1.regionWeight(this.imageData2, 0, 0, this.CORNER_SIZE, this.CORNER_SIZE);
+      this.maxRegionWeight = Math.max(topLeftWeight, topRightWeight, bottomRightWeight, bottomLeftWeight);
       if (typeof weightData !== "undefined" && weightData !== null) {
         this.weightData = new PixelData(weightData);
       }
@@ -94,7 +96,7 @@
           }
         }
       }
-      this.meanWeight = weightSum / (2 * this.numNodes);
+      this.avgWeight = weightSum / (2 * this.numNodes);
       for (x = 0, _ref5 = this.width; 0 <= _ref5 ? x < _ref5 : x > _ref5; 0 <= _ref5 ? x++ : x--) {
         this.setMultiSource(this.getNode(x, 0));
         this.setMultiSource(this.getNode(x, this.height - 1));
@@ -111,13 +113,18 @@
       return _results;
     };
     WangTile.prototype.weight = function(sx, sy, tx, ty) {
-      var mult, terminalDist;
-      terminalDist = Math.min(this.terminalDistance(sx, sy), this.terminalDistance(tx, ty));
+      var mult, terminalDist, weight;
+      terminalDist = Math.min(this.sinkDistance(sx, sy), this.sinkDistance(tx, ty));
       mult = this.TERMINAL_WEIGHT_MULT * Math.pow(this.TERMINAL_WEIGHT_DECAY, terminalDist);
       if (mult < 1) {
         mult = 1;
       }
-      return mult * WangTile.__super__.weight.call(this, sx, sy, tx, ty);
+      weight = this.WEIGHT_MULT * mult * WangTile.__super__.weight.call(this, sx, sy, tx, ty);
+      if (this.SQUARE_WEIGHTS) {
+        return weight * weight;
+      } else {
+        return weight;
+      }
     };
     WangTile.prototype.sourceDistance = function(x, y) {
       return Math.min(x, this.width - x - 1, y, this.height - y - 1);
@@ -186,10 +193,10 @@
       var imageData, maxWeight, rawImageData, weight, x, y, _ref, _ref2;
       rawImageData = context.createImageData(this.width, this.height);
       imageData = new PixelData(rawImageData);
-      maxWeight = this.meanWeight * 2;
+      maxWeight = this.avgWeight * 2;
       for (x = 0, _ref = this.width - 1; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
         for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
-          weight = Math.min(this.weight(x, y, x + 1, y) / maxWeight, 1);
+          weight = this.weight(x, y, x + 1, y) / maxWeight;
           imageData.setColor(x, y, [weight * 255, weight * 255, weight * 255, 255]);
         }
       }
@@ -199,10 +206,10 @@
       var imageData, maxWeight, rawImageData, weight, x, y, _ref, _ref2;
       rawImageData = context.createImageData(this.width, this.height);
       imageData = new PixelData(rawImageData);
-      maxWeight = this.meanWeight * 2;
+      maxWeight = this.avgWeight * 2;
       for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
         for (y = 0, _ref2 = this.height - 1; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
-          weight = Math.min(this.weight(x, y, x, y + 1) / maxWeight, 1);
+          weight = this.weight(x, y, x, y + 1) / maxWeight;
           imageData.setColor(x, y, [weight * 255, weight * 255, weight * 255, 255]);
         }
       }
@@ -212,11 +219,11 @@
       var c1, c2, diff, imageData, maxDiff, rawImageData, x, y, _ref, _ref2;
       rawImageData = context.createImageData(this.width, this.height);
       imageData = new PixelData(rawImageData);
-      maxDiff = ImageUtil.colorDifference([100, 127, 127], [0, -128, -128]) / 4;
+      maxDiff = this.avgDiff * 2;
       for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
         for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
-          c1 = this.imageData1.labColor(x, y);
-          c2 = this.imageData2.labColor(x, y);
+          c1 = this.imageData1.color(x, y);
+          c2 = this.imageData2.color(x, y);
           diff = ImageUtil.colorDifference(c1, c2) / maxDiff;
           imageData.setColor(x, y, [diff * 255, diff * 255, diff * 255, 255]);
         }
@@ -245,7 +252,7 @@
       var g, imageData, maxGrad, rawImageData, x, y, _ref, _ref2;
       rawImageData = context.createImageData(this.width, this.height);
       imageData = new PixelData(rawImageData);
-      maxGrad = ImageUtil.magnitude([100, -128, -128]);
+      maxGrad = ImageUtil.magnitude([255, 255, 255]);
       for (x = 0, _ref = this.width; 0 <= _ref ? x < _ref : x > _ref; 0 <= _ref ? x++ : x--) {
         for (y = 0, _ref2 = this.height; 0 <= _ref2 ? y < _ref2 : y > _ref2; 0 <= _ref2 ? y++ : y--) {
           g = ImageUtil.magnitude(image.gradient(x, y, dx, dy)) / maxGrad;

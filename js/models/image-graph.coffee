@@ -27,6 +27,12 @@ class ImageGraph extends Graph
     @edges[p.id][q.id]
 
   colorDifference: (sx, sy, tx, ty) ->
+    s1 = @imageData1.color(sx, sy); s2 = @imageData2.color(sx, sy)
+    t1 = @imageData1.color(tx, ty); t2 = @imageData2.color(tx, ty)
+
+    ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2)
+
+  labColorDifference: (sx, sy, tx, ty) ->
     s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
     t1 = @imageData1.labColor(tx, ty); t2 = @imageData2.labColor(tx, ty)
 
@@ -44,10 +50,7 @@ class ImageGraph extends Graph
       sw = @weightData.color(sx, sy)[0] / 255
       return 0.1 + sw
 
-    s1 = @imageData1.labColor(sx, sy); s2 = @imageData2.labColor(sx, sy)
-    t1 = @imageData1.labColor(tx, ty); t2 = @imageData2.labColor(tx, ty)
-
-    diff = ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2)
+    diff = @colorDifference sx, sy, tx, ty
     return diff if @SIMPLE_WEIGHT_CALC
 
     dx = tx - sx

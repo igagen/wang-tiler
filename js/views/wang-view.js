@@ -9,9 +9,9 @@ var WangView = Backbone.View.extend({
     "mousemove canvas": "handleMouseMove"
   },
 
-  BLOCK_SIZE: 96,
+  BLOCK_SIZE: 80,
   TARGET_SIZE: 6,
-  MAX_ITERATIONS: 50,
+  MAX_ITERATIONS: 100,
   TILES: ["rygb", "gbgb", "ryry", "gbry", "rbgy", "gygy", "rbrb", "gyrb"],
   COLORS: "rgby",
 
@@ -194,7 +194,7 @@ var WangView = Backbone.View.extend({
       var diamondTileData = this[tile + 'DiamondTileContext'].getImageData(0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
 
       var rect, wangTile;
-      var minDiff = Infinity;
+      var minWeight = Infinity;
 
       for (var j = 0; j < this.MAX_ITERATIONS; j++) {
         var r = this.getRandomRectWithoutDupCheck();
@@ -202,16 +202,16 @@ var WangView = Backbone.View.extend({
         var wt = new WangTile(diamondTileData, subSampleData);
         wt.init();
 
-        if (wt.maxRegionDiff < minDiff) {
+        if (wt.maxRegionWeight < minWeight) {
           rect = r;
           wangTile = wt;
-          minDiff = wt.maxRegionDiff;
-          
-          console.debug("Found lower error sub-sample (" + j + "): " + wt.maxRegionDiff);
+          minWeight = wt.maxRegionWeight;
+
+          console.debug("Found lower error sub-sample (" + j + "): " + wt.maxRegionWeight);
         }
       }
 
-      console.debug("Drawing tile " + i + " with error: " + Math.floor(wangTile.maxRegionDiff));
+      console.debug("Drawing tile " + i + " with error: " + wangTile.maxRegionWeight);
       try {
         this[tile + 'SubSampleContext'].drawImage(this.sourceImage, this.sampleRect.x + rect.x, this.sampleRect.y + rect.y, this.BLOCK_SIZE, this.BLOCK_SIZE, 0, 0, this.BLOCK_SIZE, this.BLOCK_SIZE);
       }

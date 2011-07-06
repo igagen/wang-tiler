@@ -3,10 +3,13 @@
 
 class WangTile extends ImageGraph
   ROUNDING_TOLERANCE: 0.001
-  TERMINAL_WEIGHT_MULT: 3
-  TERMINAL_WEIGHT_DECAY: 0.5
+  WEIGHT_MULT: 1
+  SQUARE_WEIGHTS: false
+  TERMINAL_WEIGHT_MULT: 5
+  TERMINAL_WEIGHT_DECAY: 0.2
   ADD_DIAGONAL_EDGES: true
   SIMPLE_WEIGHT_CALC: false
+  CORNER_SIZE: 6
 
   constructor: (imageData1, imageData2, weightData = null) ->
     super(imageData1, imageData2)
@@ -17,25 +20,16 @@ class WangTile extends ImageGraph
     @size = @width
 
   init: ->
-    maxRegionDiff = 0
-    regionSize = Math.floor(@size / 12)
-    base = @size - regionSize - 1
+    maxRegionWeight = 0
+    base = @size - @CORNER_SIZE - 1
 
     # Corners
-    topLeftDiff = @imageData1.regionDiff @imageData2, 0, 0, regionSize, regionSize
-    topRightDiff = @imageData1.regionDiff @imageData2, base, 0, regionSize, regionSize
-    bottomRightDiff = @imageData1.regionDiff @imageData2, base, base, regionSize, regionSize
-    bottomLeftDiff = @imageData1.regionDiff @imageData2, 0, 0, regionSize, regionSize
+    topLeftWeight = @imageData1.regionWeight @imageData2, 0, 0, @CORNER_SIZE, @CORNER_SIZE
+    topRightWeight = @imageData1.regionWeight @imageData2, base, 0, @CORNER_SIZE, @CORNER_SIZE
+    bottomRightWeight = @imageData1.regionWeight @imageData2, base, base, @CORNER_SIZE, @CORNER_SIZE
+    bottomLeftWeight = @imageData1.regionWeight @imageData2, 0, 0, @CORNER_SIZE, @CORNER_SIZE
 
-    @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff
-
-    # Edges
-    # topDiff = @imageData1.regionDiff @imageData2, regionSize, 0, 2 * regionSize, regionSize
-    # rightDiff = @imageData1.regionDiff @imageData2, base, regionSize, regionSize, 2 * regionSize
-    # bottomDiff = @imageData1.regionDiff @imageData2, regionSize, base, 2 * regionSize, regionSize
-    # leftDiff = @imageData1.regionDiff @imageData2, 0, regionSize, regionSize, 2 * regionSize
-    # 
-    # @maxRegionDiff = Math.max topLeftDiff, topRightDiff, bottomRightDiff, bottomLeftDiff, topDiff, rightDiff, bottomDiff, leftDiff
+    @maxRegionWeight = Math.max topLeftWeight, topRightWeight, bottomRightWeight, bottomLeftWeight
 
     @weightData = new PixelData(weightData) if weightData?
 
@@ -105,7 +99,7 @@ class WangTile extends ImageGraph
     # Adds source and sink nodes as appropriate for solving the min-cut for a strict Wang-tile
     # Source nodes around the borders, and sink nodes diagonally crossing thru
 
-    @meanWeight = weightSum / (2 * @numNodes)
+    @avgWeight = weightSum / (2 * @numNodes)
 
     # Add border source nodes
     for x in [0...@width]
@@ -122,11 +116,12 @@ class WangTile extends ImageGraph
       @setMultiSink @getNode(i, @height - 1 - i)
 
   weight: (sx, sy, tx, ty) ->
-    terminalDist = Math.min @terminalDistance(sx, sy), @terminalDistance(tx, ty)
+    terminalDist = Math.min @sinkDistance(sx, sy), @sinkDistance(tx, ty)
     mult = @TERMINAL_WEIGHT_MULT * Math.pow @TERMINAL_WEIGHT_DECAY, terminalDist
     mult = 1 if mult < 1
 
-    mult * super(sx, sy, tx, ty)
+    weight = @WEIGHT_MULT * mult * super(sx, sy, tx, ty)
+    if @SQUARE_WEIGHTS then weight * weight else weight
 
   sourceDistance: (x, y) ->
     Math.min(x, @width - x - 1, y, @height - y - 1)
@@ -188,10 +183,10 @@ class WangTile extends ImageGraph
     rawImageData = context.createImageData @width, @height
     imageData = new PixelData rawImageData
 
-    maxWeight = @meanWeight * 2
+    maxWeight = @avgWeight * 2
     for x in [0...@width - 1]
       for y in [0...@height]
-        weight = Math.min(@weight(x, y, x + 1, y) / maxWeight, 1)
+        weight = @weight(x, y, x + 1, y) / maxWeight
         imageData.setColor x, y, [weight * 255, weight * 255, weight * 255, 255]
 
     context.putImageData rawImageData, 0, 0
@@ -200,10 +195,10 @@ class WangTile extends ImageGraph
     rawImageData = context.createImageData @width, @height
     imageData = new PixelData rawImageData
 
-    maxWeight = @meanWeight * 2
+    maxWeight = @avgWeight * 2
     for x in [0...@width]
       for y in [0...@height - 1]
-        weight = Math.min(@weight(x, y, x, y + 1) / maxWeight, 1)
+        weight = @weight(x, y, x, y + 1) / maxWeight
         imageData.setColor x, y, [weight * 255, weight * 255, weight * 255, 255]
 
     context.putImageData rawImageData, 0, 0
@@ -212,12 +207,12 @@ class WangTile extends ImageGraph
     rawImageData = context.createImageData @width, @height
     imageData = new PixelData rawImageData
 
-    maxDiff = ImageUtil.colorDifference([100, 127, 127], [0, -128, -128]) / 4
+    maxDiff = @avgDiff * 2
 
     for x in [0...@width]
       for y in [0...@height]
-        c1 = @imageData1.labColor x, y
-        c2 = @imageData2.labColor x, y
+        c1 = @imageData1.color x, y
+        c2 = @imageData2.color x, y
         diff = ImageUtil.colorDifference(c1, c2) / maxDiff
         imageData.setColor x, y, [diff * 255, diff * 255, diff * 255, 255]
 
@@ -234,7 +229,7 @@ class WangTile extends ImageGraph
     rawImageData = context.createImageData @width, @height
     imageData = new PixelData rawImageData
 
-    maxGrad = ImageUtil.magnitude [100, -128, -128]
+    maxGrad = ImageUtil.magnitude [255, 255, 255]
 
     for x in [0...@width]
       for y in [0...@height]

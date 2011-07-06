@@ -133,7 +133,7 @@
         for (ky = 0; 0 <= size ? ky < size : ky > size; 0 <= size ? ky++ : ky--) {
           clampedX = Math.min(Math.max(x + kx - offset, 0), this.width - 1);
           clampedY = Math.min(Math.max(y + ky - offset, 0), this.height - 1);
-          color = this.labColor(clampedX, clampedY);
+          color = this.color(clampedX, clampedY);
           k = kernel[kx][ky];
           convolution[0] += color[0] * k;
           convolution[1] += color[1] * k;
@@ -149,14 +149,61 @@
       return this.regionDiff(imageData, 0, 0, this.width, this.height);
     };
     PixelData.prototype.regionDiff = function(imageData, x, y, w, h) {
-      var diffSum, rx, ry, _ref, _ref2;
+      var d, diffSum, rx, ry, _ref, _ref2;
       diffSum = 0;
       for (rx = x, _ref = x + w; x <= _ref ? rx < _ref : rx > _ref; x <= _ref ? rx++ : rx--) {
         for (ry = y, _ref2 = y + h; y <= _ref2 ? ry < _ref2 : ry > _ref2; y <= _ref2 ? ry++ : ry--) {
-          diffSum += ImageUtil.colorDifference(this.labColor(x, y), imageData.labColor(x, y));
+          d = ImageUtil.colorDifference(this.color(x, y), imageData.color(x, y));
+          diffSum += d;
         }
       }
       return diffSum / (w * h);
+    };
+    PixelData.prototype.maxRegionWeight = function(imageData, x, y, w, h) {
+      var maxWeight, sx, sy, tx, ty, weight, xWeight, yWeight, _ref, _ref2;
+      maxWeight = 0;
+      for (sx = x, _ref = x + w - 1; x <= _ref ? sx < _ref : sx > _ref; x <= _ref ? sx++ : sx--) {
+        for (sy = y, _ref2 = y + h - 1; y <= _ref2 ? sy < _ref2 : sy > _ref2; y <= _ref2 ? sy++ : sy--) {
+          tx = sx + 1;
+          ty = sy;
+          xWeight = this.weight(imageData, sx, sy, sx + 1, sy);
+          yWeight = this.weight(imageData, sx, sy, sx, sy + 1);
+          weight = Math.max(xWeight, yWeight);
+          if (weight > maxWeight) {
+            maxWeight = weight;
+          }
+        }
+      }
+      return maxWeight;
+    };
+    PixelData.prototype.regionWeight = function(imageData, x, y, w, h) {
+      var sx, sy, tx, ty, weightSum, xWeight, yWeight, _ref, _ref2;
+      weightSum = 0;
+      for (sx = x, _ref = x + w - 1; x <= _ref ? sx < _ref : sx > _ref; x <= _ref ? sx++ : sx--) {
+        for (sy = y, _ref2 = y + h - 1; y <= _ref2 ? sy < _ref2 : sy > _ref2; y <= _ref2 ? sy++ : sy--) {
+          tx = sx + 1;
+          ty = sy;
+          xWeight = this.weight(imageData, sx, sy, sx + 1, sy);
+          yWeight = this.weight(imageData, sx, sy, sx, sy + 1);
+          weightSum += xWeight * xWeight + yWeight * yWeight;
+        }
+      }
+      return weightSum;
+    };
+    PixelData.prototype.weight = function(imageData, sx, sy, tx, ty) {
+      var diff, dx, dy, gs1, gs2, gt1, gt2, s1, s2, t1, t2;
+      s1 = this.color(sx, sy);
+      s2 = imageData.color(sx, sy);
+      t1 = this.color(tx, ty);
+      t2 = imageData.color(tx, ty);
+      diff = ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2);
+      dx = tx - sx;
+      dy = ty - sy;
+      gs1 = ImageUtil.magnitude(this.gradient(sx, sy, dx, dy));
+      gs2 = ImageUtil.magnitude(imageData.gradient(sx, sy, dx, dy));
+      gt1 = ImageUtil.magnitude(this.gradient(tx, ty, dx, dy));
+      gt2 = ImageUtil.magnitude(imageData.gradient(tx, ty, dx, dy));
+      return diff / (gs1 + gs2 + gt1 + gt2);
     };
     return PixelData;
   })();

@@ -29,7 +29,7 @@ ImageUtil =
     [c1[0] - c2[0], c1[1] - c2[1], c1[2] - c2[2]]
 
   colorDifference: (c1, c2) ->
-    # e76 algorithm is simply the Euclidean distance between the two colors in the Lab color space
+    # e76 algorithm is simply the Euclidean distance between the two colors
     ImageUtil.magnitude(ImageUtil.subtract(c1, c2))
 
 
@@ -90,7 +90,7 @@ class PixelData
         clampedX = Math.min(Math.max(x + kx - offset, 0), @width - 1)
         clampedY = Math.min(Math.max(y + ky - offset, 0), @height - 1)
 
-        color = @labColor clampedX, clampedY
+        color = @color clampedX, clampedY
 
         k = kernel[kx][ky]
         convolution[0] += color[0] * k
@@ -107,9 +107,51 @@ class PixelData
     diffSum = 0
     for rx in [x...x + w]
       for ry in [y...y + h]
-        diffSum += ImageUtil.colorDifference(@labColor(x, y), imageData.labColor(x, y))
+        d = ImageUtil.colorDifference(@color(x, y), imageData.color(x, y))
+        diffSum += d
 
     diffSum / (w * h)
+
+  maxRegionWeight: (imageData, x, y, w, h) ->
+    maxWeight = 0
+    for sx in [x...x + w - 1]
+      for sy in [y...y + h - 1]
+        tx = sx + 1
+        ty = sy
+        xWeight = @weight imageData, sx, sy, sx + 1, sy
+        yWeight = @weight imageData, sx, sy, sx, sy + 1
+        weight = Math.max xWeight, yWeight
+        maxWeight = weight if weight > maxWeight
+
+    maxWeight
+
+  regionWeight: (imageData, x, y, w, h) ->
+    weightSum = 0
+    for sx in [x...x + w - 1]
+      for sy in [y...y + h - 1]
+        tx = sx + 1
+        ty = sy
+        xWeight = @weight imageData, sx, sy, sx + 1, sy
+        yWeight = @weight imageData, sx, sy, sx, sy + 1
+        weightSum += xWeight * xWeight + yWeight * yWeight
+
+    weightSum
+
+  weight: (imageData, sx, sy, tx, ty) ->
+    s1 = @color(sx, sy); s2 = imageData.color(sx, sy)
+    t1 = @color(tx, ty); t2 = imageData.color(tx, ty)
+
+    diff = ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2)
+
+    dx = tx - sx
+    dy = ty - sy
+
+    gs1 = ImageUtil.magnitude @gradient(sx, sy, dx, dy)
+    gs2 = ImageUtil.magnitude imageData.gradient(sx, sy, dx, dy)
+    gt1 = ImageUtil.magnitude @gradient(tx, ty, dx, dy)
+    gt2 = ImageUtil.magnitude imageData.gradient(tx, ty, dx, dy)
+
+    diff / (gs1 + gs2 + gt1 + gt2)
 
 window.ImageUtil = ImageUtil
 window.PixelData = PixelData

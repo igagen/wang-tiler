@@ -40,6 +40,14 @@
     };
     ImageGraph.prototype.colorDifference = function(sx, sy, tx, ty) {
       var s1, s2, t1, t2;
+      s1 = this.imageData1.color(sx, sy);
+      s2 = this.imageData2.color(sx, sy);
+      t1 = this.imageData1.color(tx, ty);
+      t2 = this.imageData2.color(tx, ty);
+      return ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2);
+    };
+    ImageGraph.prototype.labColorDifference = function(sx, sy, tx, ty) {
+      var s1, s2, t1, t2;
       s1 = this.imageData1.labColor(sx, sy);
       s2 = this.imageData2.labColor(sx, sy);
       t1 = this.imageData1.labColor(tx, ty);
@@ -54,16 +62,12 @@
       return this.partition();
     };
     ImageGraph.prototype.weight = function(sx, sy, tx, ty) {
-      var diff, dx, dy, gs1, gs2, gt1, gt2, s1, s2, sw, t1, t2;
+      var diff, dx, dy, gs1, gs2, gt1, gt2, sw;
       if (this.weightData) {
         sw = this.weightData.color(sx, sy)[0] / 255;
         return 0.1 + sw;
       }
-      s1 = this.imageData1.labColor(sx, sy);
-      s2 = this.imageData2.labColor(sx, sy);
-      t1 = this.imageData1.labColor(tx, ty);
-      t2 = this.imageData2.labColor(tx, ty);
-      diff = ImageUtil.colorDifference(s1, s2) + ImageUtil.colorDifference(t1, t2);
+      diff = this.colorDifference(sx, sy, tx, ty);
       if (this.SIMPLE_WEIGHT_CALC) {
         return diff;
       }
